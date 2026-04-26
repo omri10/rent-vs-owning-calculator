@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FL Buy vs CA Rent — Cost Comparison</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --fl: #38bdf8;
+    --fl-strong: #0ea5e9;
+    --ca: #fb923c;
+    --ca-strong: #ea580c;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 20px 80px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin-bottom: 28px;
+    font-size: 14px;
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 1000px) {
+    .compare { grid-template-columns: 1fr; }
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .col-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 4px 8px;
+    border-bottom: 2px solid var(--border);
+  }
+  .col-header.fl { border-bottom-color: var(--fl); }
+  .col-header.ca { border-bottom-color: var(--ca); }
+  .col-header h2 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  .col-header .tag {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .col-header.fl .tag { background: rgba(56,189,248,0.18); color: var(--fl); }
+  .col-header.ca .tag { background: rgba(251,146,60,0.18); color: var(--ca); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .card h3 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .input-wrap { position: relative; }
+  .input-wrap .prefix,
+  .input-wrap .suffix {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .input-wrap .prefix { left: 12px; }
+  .input-wrap .suffix { right: 12px; }
+  input[type="number"], input[type="text"], select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  input[type="number"].with-prefix { padding-left: 26px; }
+  input[type="number"].with-suffix { padding-right: 28px; }
+  input[type="number"].with-prefix.with-suffix { padding-left: 26px; padding-right: 36px; }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--fl);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+  }
+  .col.ca input:focus, .col.ca select:focus {
+    border-color: var(--ca);
+    box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.2);
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .extras-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .extra-row {
+    display: grid;
+    grid-template-columns: 1fr 110px 100px 32px;
+    gap: 8px;
+    align-items: center;
+  }
+  .extra-row .remove-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--danger);
+    border-radius: 8px;
+    width: 32px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .extra-row .remove-btn:hover { background: rgba(248, 113, 113, 0.1); }
+  .add-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .col.fl .add-btn { color: var(--fl); }
+  .col.ca .add-btn { color: var(--ca); }
+  .col.fl .add-btn:hover { border-color: var(--fl); background: rgba(56,189,248,0.05); }
+  .col.ca .add-btn:hover { border-color: var(--ca); background: rgba(251,146,60,0.05); }
+  .summary { color: white; border: none; }
+  .summary.fl { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); }
+  .summary.ca { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); }
+  .summary h3 { color: rgba(255,255,255,0.85); }
+  .summary .big-number {
+    font-size: 36px;
+    font-weight: 700;
+    margin: 4px 0;
+    letter-spacing: -0.02em;
+  }
+  .summary .big-label {
+    font-size: 12px;
+    color: rgba(255,255,255,0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .summary-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.2);
+  }
+  .summary-split .num { font-size: 18px; font-weight: 600; }
+  .summary-split .lbl { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.breakdown {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.breakdown th, table.breakdown td {
+    text-align: left;
+    padding: 9px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.breakdown th {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  table.breakdown td.num,
+  table.breakdown th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.breakdown tr.total td {
+    font-weight: 700;
+    border-bottom: none;
+    border-top: 2px solid var(--border);
+    padding-top: 12px;
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-left: 8px;
+  }
+  .pill.fl { background: rgba(56, 189, 248, 0.15); color: var(--fl); }
+  .pill.ca { background: rgba(251, 146, 60, 0.15); color: var(--ca); }
+  .verdict-card {
+    margin-top: 24px;
+    padding: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .verdict-card h2 {
+    margin: 0 0 16px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .verdict-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    align-items: center;
+  }
+  @media (max-width: 800px) {
+    .verdict-grid { grid-template-columns: 1fr; }
+  }
+  .verdict-side {
+    text-align: center;
+    padding: 16px;
+    border-radius: 10px;
+    background: var(--panel-2);
+  }
+  .verdict-side.fl { border-top: 3px solid var(--fl); }
+  .verdict-side.ca { border-top: 3px solid var(--ca); }
+  .verdict-side .name {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .verdict-side .amt {
+    font-size: 28px;
+    font-weight: 700;
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+  .verdict-side .yr {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .verdict-mid {
+    text-align: center;
+  }
+  .verdict-mid .delta {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .verdict-mid .delta.cheaper-fl { color: var(--fl); }
+  .verdict-mid .delta.cheaper-ca { color: var(--ca); }
+  .verdict-mid .label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .footer-actions {
+    margin-top: 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+  .ghost-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .ghost-btn:hover { color: var(--text); border-color: var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Florida Buy vs California Rent</h1>
+  <div class="subtitle">Side-by-side monthly cost comparison. All data stays on your device.</div>
+
+  <div class="compare">
+    <!-- FLORIDA / BUY -->
+    <div class="col fl">
+      <div class="col-header fl">
+        <h2>Florida</h2>
+        <span class="tag">Buying</span>
+      </div>
+
+      <div class="card">
+        <h3>Purchase</h3>
+        <div class="row">
+          <label for="fl_price">House price</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="fl_price" class="with-prefix" placeholder="450000" min="0" step="1000" />
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="row">
+            <label for="fl_downAmt">Down payment</label>
+            <div class="input-wrap">
+              <span class="prefix">$</span>
+              <input type="number" id="fl_downAmt" class="with-prefix" placeholder="90000" min="0" step="1000" />
+            </div>
+          </div>
+          <div class="row">
+            <label for="fl_downPct">Down %</label>
+            <div class="input-wrap">
+              <input type="number" id="fl_downPct" class="with-suffix" placeholder="20" min="0" max="100" step="0.1" />
+              <span class="suffix">%</span>
+            </div>
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="row">
+            <label for="fl_rate">Interest rate</label>
+            <div class="input-wrap">
+              <input type="number" id="fl_rate" class="with-suffix" placeholder="6.5" min="0" max="30" step="0.01" />
+              <span class="suffix">%</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="fl_term">Loan term</label>
+            <div class="input-wrap">
+              <input type="number" id="fl_term" class="with-suffix" placeholder="30" min="1" max="50" step="1" />
+              <span class="suffix">yrs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Florida fixed costs</h3>
+        <div class="row">
+          <label for="fl_taxPct">Property tax <span class="pill fl">FL avg 1.98%</span></label>
+          <div class="input-wrap">
+            <input type="number" id="fl_taxPct" class="with-suffix" value="1.98" min="0" max="10" step="0.01" />
+            <span class="suffix">% / yr</span>
+          </div>
+        </div>
+        <div class="row">
+          <label for="fl_insurance">Homeowners insurance</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="fl_insurance" class="with-prefix with-suffix" placeholder="3500" min="0" step="50" />
+            <span class="suffix">/ yr</span>
+          </div>
+        </div>
+        <div class="row">
+          <label for="fl_hoa">HOA (optional)</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="fl_hoa" class="with-prefix with-suffix" placeholder="0" min="0" step="10" />
+            <span class="suffix">/ mo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Other recurring expenses</h3>
+        <div id="fl_extras" class="extras-list"></div>
+        <button class="add-btn" data-add="fl">+ Add expense (gardener, pool, pest control…)</button>
+      </div>
+
+      <div class="card summary fl">
+        <h3>Estimated monthly cost</h3>
+        <div class="big-number" id="fl_totalMonthly">$0</div>
+        <div class="big-label">per month, all-in</div>
+        <div class="summary-split">
+          <div>
+            <div class="num" id="fl_totalAnnual">$0</div>
+            <div class="lbl">per year</div>
+          </div>
+          <div>
+            <div class="num" id="fl_loanAmount">$0</div>
+            <div class="lbl">loan amount</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Monthly breakdown</h3>
+        <table class="breakdown">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th class="num">Monthly</th>
+              <th class="num">Annual</th>
+            </tr>
+          </thead>
+          <tbody id="fl_breakdownBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CALIFORNIA / RENT -->
+    <div class="col ca">
+      <div class="col-header ca">
+        <h2>California</h2>
+        <span class="tag">Renting</span>
+      </div>
+
+      <div class="card">
+        <h3>Rent</h3>
+        <div class="row">
+          <label for="ca_rent">Monthly rent <span class="pill ca">default $5,400</span></label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="ca_rent" class="with-prefix with-suffix" value="5400" min="0" step="50" />
+            <span class="suffix">/ mo</span>
+          </div>
+        </div>
+        <div class="row">
+          <label for="ca_renterIns">Renter's insurance (optional)</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="ca_renterIns" class="with-prefix with-suffix" placeholder="0" min="0" step="5" />
+            <span class="suffix">/ mo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recurring household costs</h3>
+        <div class="row">
+          <label for="ca_utilities">Utilities (electric, water, internet…)</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="ca_utilities" class="with-prefix with-suffix" placeholder="350" min="0" step="10" />
+            <span class="suffix">/ mo</span>
+          </div>
+        </div>
+        <div class="row">
+          <label for="ca_cleaner">Cleaner</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="ca_cleaner" class="with-prefix with-suffix" placeholder="400" min="0" step="10" />
+            <span class="suffix">/ mo</span>
+          </div>
+        </div>
+        <div class="row">
+          <label for="ca_afterschool">After school</label>
+          <div class="input-wrap">
+            <span class="prefix">$</span>
+            <input type="number" id="ca_afterschool" class="with-prefix with-suffix" placeholder="800" min="0" step="10" />
+            <span class="suffix">/ mo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Other recurring expenses</h3>
+        <div id="ca_extras" class="extras-list"></div>
+        <button class="add-btn" data-add="ca">+ Add expense</button>
+      </div>
+
+      <div class="card summary ca">
+        <h3>Estimated monthly cost</h3>
+        <div class="big-number" id="ca_totalMonthly">$0</div>
+        <div class="big-label">per month, all-in</div>
+        <div class="summary-split">
+          <div>
+            <div class="num" id="ca_totalAnnual">$0</div>
+            <div class="lbl">per year</div>
+          </div>
+          <div>
+            <div class="num" id="ca_rentAnnual">$0</div>
+            <div class="lbl">rent / year</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Monthly breakdown</h3>
+        <table class="breakdown">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th class="num">Monthly</th>
+              <th class="num">Annual</th>
+            </tr>
+          </thead>
+          <tbody id="ca_breakdownBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="verdict-card">
+    <h2>Comparison</h2>
+    <div class="verdict-grid">
+      <div class="verdict-side fl">
+        <div class="name">Florida (Buy)</div>
+        <div class="amt" id="v_fl">$0</div>
+        <div class="yr" id="v_fl_yr">$0 / year</div>
+      </div>
+      <div class="verdict-mid">
+        <div class="delta" id="v_delta">$0</div>
+        <div class="label" id="v_label">Enter values to compare</div>
+      </div>
+      <div class="verdict-side ca">
+        <div class="name">California (Rent)</div>
+        <div class="amt" id="v_ca">$0</div>
+        <div class="yr" id="v_ca_yr">$0 / year</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-actions">
+    <button class="ghost-btn" id="resetBtn">Reset all</button>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'fl-vs-ca-v1';
+const fmt = n => '$' + (Math.round(n) || 0).toLocaleString('en-US');
+
+const flFields = ['fl_price','fl_downAmt','fl_downPct','fl_rate','fl_term','fl_taxPct','fl_insurance','fl_hoa'];
+const caFields = ['ca_rent','ca_renterIns','ca_utilities','ca_cleaner','ca_afterschool'];
+
+const els = {};
+[...flFields, ...caFields,
+  'fl_extras','fl_totalMonthly','fl_totalAnnual','fl_loanAmount','fl_breakdownBody',
+  'ca_extras','ca_totalMonthly','ca_totalAnnual','ca_rentAnnual','ca_breakdownBody',
+  'v_fl','v_fl_yr','v_ca','v_ca_yr','v_delta','v_label','resetBtn'
+].forEach(id => els[id] = document.getElementById(id));
+
+let flExtras = [];
+let caExtras = [];
+let syncing = false;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function num(el) {
+  const v = parseFloat(el.value);
+  return isFinite(v) ? v : 0;
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    [...flFields, ...caFields].forEach(k => {
+      if (s[k] !== undefined && s[k] !== null && s[k] !== '') els[k].value = s[k];
+    });
+    flExtras = Array.isArray(s.flExtras) ? s.flExtras : [];
+    caExtras = Array.isArray(s.caExtras) ? s.caExtras : [];
+  } catch (e) {}
+}
+
+function saveState() {
+  const s = { flExtras, caExtras };
+  [...flFields, ...caFields].forEach(k => s[k] = els[k].value);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+}
+
+function renderExtras(side) {
+  const list = side === 'fl' ? flExtras : caExtras;
+  const container = side === 'fl' ? els.fl_extras : els.ca_extras;
+  container.innerHTML = '';
+  list.forEach((ex, i) => {
+    const row = document.createElement('div');
+    row.className = 'extra-row';
+    row.innerHTML = `
+      <input type="text" data-side="${side}" data-i="${i}" data-f="name" placeholder="Name" value="${escapeHtml(ex.name || '')}" />
+      <div class="input-wrap">
+        <span class="prefix">$</span>
+        <input type="number" class="with-prefix" data-side="${side}" data-i="${i}" data-f="amount" placeholder="100" min="0" step="1" value="${ex.amount ?? ''}" />
+      </div>
+      <select data-side="${side}" data-i="${i}" data-f="period">
+        <option value="monthly" ${ex.period==='monthly'?'selected':''}>monthly</option>
+        <option value="quarterly" ${ex.period==='quarterly'?'selected':''}>quarterly</option>
+        <option value="yearly" ${ex.period==='yearly'?'selected':''}>yearly</option>
+      </select>
+      <button class="remove-btn" data-side="${side}" data-i="${i}" data-f="remove" title="Remove">×</button>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function syncFlDownPayment(source) {
+  if (syncing) return;
+  syncing = true;
+  const price = num(els.fl_price);
+  if (price > 0) {
+    if (source === 'amt') {
+      const pct = (num(els.fl_downAmt) / price) * 100;
+      els.fl_downPct.value = isFinite(pct) ? +pct.toFixed(2) : '';
+    } else if (source === 'pct') {
+      const amt = (num(els.fl_downPct) / 100) * price;
+      els.fl_downAmt.value = isFinite(amt) ? Math.round(amt) : '';
+    } else {
+      if (els.fl_downPct.value !== '') {
+        els.fl_downAmt.value = Math.round((num(els.fl_downPct) / 100) * price);
+      } else if (els.fl_downAmt.value !== '') {
+        els.fl_downPct.value = +((num(els.fl_downAmt) / price) * 100).toFixed(2);
+      }
+    }
+  }
+  syncing = false;
+}
+
+function monthlyMortgage(principal, annualRatePct, years) {
+  if (principal <= 0 || years <= 0) return 0;
+  const n = years * 12;
+  const r = (annualRatePct / 100) / 12;
+  if (r === 0) return principal / n;
+  return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+}
+
+function periodToMonthly(amt, period) {
+  if (period === 'yearly') return amt / 12;
+  if (period === 'quarterly') return amt / 3;
+  return amt;
+}
+
+function computeFl() {
+  const price = num(els.fl_price);
+  const down = num(els.fl_downAmt);
+  const rate = num(els.fl_rate);
+  const years = num(els.fl_term);
+  const taxPct = num(els.fl_taxPct);
+  const insAnnual = num(els.fl_insurance);
+  const hoaMonthly = num(els.fl_hoa);
+
+  const loan = Math.max(0, price - down);
+  const mortgageMonthly = monthlyMortgage(loan, rate, years);
+  const taxMonthly = (price * (taxPct / 100)) / 12;
+  const insMonthly = insAnnual / 12;
+
+  const rows = [
+    { label: 'Mortgage (P&I)', monthly: mortgageMonthly },
+    { label: `Property tax (${taxPct || 0}%)`, monthly: taxMonthly },
+    { label: 'Homeowners insurance', monthly: insMonthly },
+  ];
+  if (hoaMonthly > 0) rows.push({ label: 'HOA', monthly: hoaMonthly });
+  flExtras.forEach(ex => {
+    const amt = parseFloat(ex.amount) || 0;
+    if (!amt && !ex.name) return;
+    rows.push({ label: ex.name || 'Unnamed', monthly: periodToMonthly(amt, ex.period) });
+  });
+
+  const total = rows.reduce((s, r) => s + r.monthly, 0);
+  els.fl_totalMonthly.textContent = fmt(total);
+  els.fl_totalAnnual.textContent = fmt(total * 12);
+  els.fl_loanAmount.textContent = fmt(loan);
+  els.fl_breakdownBody.innerHTML = rows.map(r => `
+    <tr><td>${escapeHtml(r.label)}</td><td class="num">${fmt(r.monthly)}</td><td class="num">${fmt(r.monthly * 12)}</td></tr>
+  `).join('') + `
+    <tr class="total"><td>Total</td><td class="num">${fmt(total)}</td><td class="num">${fmt(total * 12)}</td></tr>
+  `;
+  return total;
+}
+
+function computeCa() {
+  const rent = num(els.ca_rent);
+  const renterIns = num(els.ca_renterIns);
+  const utilities = num(els.ca_utilities);
+  const cleaner = num(els.ca_cleaner);
+  const afterschool = num(els.ca_afterschool);
+
+  const rows = [
+    { label: 'Rent', monthly: rent },
+  ];
+  if (renterIns > 0) rows.push({ label: "Renter's insurance", monthly: renterIns });
+  if (utilities > 0) rows.push({ label: 'Utilities', monthly: utilities });
+  if (cleaner > 0) rows.push({ label: 'Cleaner', monthly: cleaner });
+  if (afterschool > 0) rows.push({ label: 'After school', monthly: afterschool });
+  caExtras.forEach(ex => {
+    const amt = parseFloat(ex.amount) || 0;
+    if (!amt && !ex.name) return;
+    rows.push({ label: ex.name || 'Unnamed', monthly: periodToMonthly(amt, ex.period) });
+  });
+
+  const total = rows.reduce((s, r) => s + r.monthly, 0);
+  els.ca_totalMonthly.textContent = fmt(total);
+  els.ca_totalAnnual.textContent = fmt(total * 12);
+  els.ca_rentAnnual.textContent = fmt(rent * 12);
+  els.ca_breakdownBody.innerHTML = rows.map(r => `
+    <tr><td>${escapeHtml(r.label)}</td><td class="num">${fmt(r.monthly)}</td><td class="num">${fmt(r.monthly * 12)}</td></tr>
+  `).join('') + `
+    <tr class="total"><td>Total</td><td class="num">${fmt(total)}</td><td class="num">${fmt(total * 12)}</td></tr>
+  `;
+  return total;
+}
+
+function updateVerdict(flTotal, caTotal) {
+  els.v_fl.textContent = fmt(flTotal) + ' / mo';
+  els.v_fl_yr.textContent = fmt(flTotal * 12) + ' / year';
+  els.v_ca.textContent = fmt(caTotal) + ' / mo';
+  els.v_ca_yr.textContent = fmt(caTotal * 12) + ' / year';
+
+  const delta = caTotal - flTotal;
+  els.v_delta.classList.remove('cheaper-fl', 'cheaper-ca');
+  if (Math.abs(delta) < 1 || (flTotal === 0 && caTotal === 0)) {
+    els.v_delta.textContent = '$0';
+    els.v_label.textContent = flTotal === 0 && caTotal === 0 ? 'Enter values to compare' : 'Roughly equal';
+  } else if (delta > 0) {
+    els.v_delta.textContent = '−' + fmt(Math.abs(delta)) + ' / mo';
+    els.v_delta.classList.add('cheaper-fl');
+    els.v_label.textContent = `Florida is ${fmt(delta * 12)} cheaper / year`;
+  } else {
+    els.v_delta.textContent = '−' + fmt(Math.abs(delta)) + ' / mo';
+    els.v_delta.classList.add('cheaper-ca');
+    els.v_label.textContent = `California is ${fmt(Math.abs(delta) * 12)} cheaper / year`;
+  }
+}
+
+function refresh() {
+  const flTotal = computeFl();
+  const caTotal = computeCa();
+  updateVerdict(flTotal, caTotal);
+  saveState();
+}
+
+flFields.forEach(k => {
+  els[k].addEventListener('input', () => {
+    if (k === 'fl_downAmt') syncFlDownPayment('amt');
+    else if (k === 'fl_downPct') syncFlDownPayment('pct');
+    else if (k === 'fl_price') syncFlDownPayment('price');
+    refresh();
+  });
+});
+caFields.forEach(k => {
+  els[k].addEventListener('input', refresh);
+});
+
+document.querySelectorAll('[data-add]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const side = btn.dataset.add;
+    const list = side === 'fl' ? flExtras : caExtras;
+    list.push({ name: '', amount: '', period: 'monthly' });
+    renderExtras(side);
+    refresh();
+  });
+});
+
+function handleExtraEvent(e) {
+  const t = e.target;
+  const side = t.dataset.side;
+  const i = +t.dataset.i;
+  const f = t.dataset.f;
+  if (!side || !f) return;
+  const list = side === 'fl' ? flExtras : caExtras;
+  if (f === 'remove') {
+    list.splice(i, 1);
+    renderExtras(side);
+    refresh();
+    return;
+  }
+  if (i >= 0 && list[i]) {
+    list[i][f] = t.value;
+    refresh();
+  }
+}
+els.fl_extras.addEventListener('input', handleExtraEvent);
+els.fl_extras.addEventListener('change', handleExtraEvent);
+els.fl_extras.addEventListener('click', e => {
+  if (e.target.dataset.f === 'remove') handleExtraEvent(e);
+});
+els.ca_extras.addEventListener('input', handleExtraEvent);
+els.ca_extras.addEventListener('change', handleExtraEvent);
+els.ca_extras.addEventListener('click', e => {
+  if (e.target.dataset.f === 'remove') handleExtraEvent(e);
+});
+
+els.resetBtn.addEventListener('click', () => {
+  if (!confirm('Clear all inputs on both sides?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  flFields.forEach(k => { if (k !== 'fl_taxPct') els[k].value = ''; });
+  els.fl_taxPct.value = '1.98';
+  caFields.forEach(k => { if (k !== 'ca_rent') els[k].value = ''; });
+  els.ca_rent.value = '5400';
+  flExtras = [];
+  caExtras = [];
+  renderExtras('fl');
+  renderExtras('ca');
+  refresh();
+});
+
+loadState();
+renderExtras('fl');
+renderExtras('ca');
+refresh();
+</script>
+</body>
+</html>

@@ -331,12 +331,150 @@
     font-family: inherit;
   }
   .ghost-btn:hover { color: var(--text); border-color: var(--text); }
+  .header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .header-bar .left { flex: 1 1 auto; min-width: 280px; }
+  .header-bar .left .subtitle { margin-bottom: 0; }
+  .sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .sync-indicator .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .sync-indicator.synced .dot { background: var(--good); }
+  .sync-indicator.syncing .dot { background: var(--warn); animation: pulse 1s infinite; }
+  .sync-indicator.error .dot { background: var(--danger); }
+  .sync-indicator.offline .dot { background: var(--muted); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .sync-indicator button {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0 0 0 6px;
+    font-family: inherit;
+  }
+  .sync-indicator button:hover { text-decoration: underline; }
+  .setup-banner {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--fl);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 24px;
+  }
+  .setup-banner h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+  }
+  .setup-banner p {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .setup-banner ol {
+    margin: 0 0 14px;
+    padding-left: 20px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .setup-banner ol a { color: var(--fl); }
+  .setup-banner .setup-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .setup-banner input {
+    flex: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
+  .setup-banner button {
+    background: var(--fl-strong);
+    color: white;
+    border: none;
+    padding: 0 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  .setup-banner button:hover { background: var(--fl); }
+  .setup-banner .skip {
+    background: transparent;
+    color: var(--muted);
+    text-decoration: underline;
+    font-size: 12px;
+    border: none;
+    cursor: pointer;
+    padding: 8px 0 0;
+    font-family: inherit;
+  }
+  .share-link {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--text);
+    word-break: break-all;
+    display: none;
+  }
+  .share-link.visible { display: block; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Florida Buy vs California Rent</h1>
-  <div class="subtitle">Side-by-side monthly cost comparison. All data stays on your device.</div>
+  <div class="header-bar">
+    <div class="left">
+      <h1>Florida Buy vs California Rent</h1>
+      <div class="subtitle">Side-by-side monthly cost comparison.</div>
+    </div>
+    <div class="sync-indicator" id="syncIndicator" title="Sync status">
+      <span class="dot"></span>
+      <span id="syncStatus">Local only</span>
+      <button id="refreshBtn" style="display:none">Refresh</button>
+    </div>
+  </div>
+
+  <div class="setup-banner" id="setupBanner" style="display:none">
+    <h3>Enable cloud sync (one-time setup)</h3>
+    <p>So you and your friend share one editable view. Free, no signup beyond email.</p>
+    <ol>
+      <li>Go to <a href="https://getpantry.cloud" target="_blank" rel="noopener">getpantry.cloud</a> and enter your email to get a Pantry ID (a UUID).</li>
+      <li>Paste it below — your data will sync to the cloud automatically.</li>
+      <li>Share the URL that appears with your friend. They'll see and edit the same view.</li>
+    </ol>
+    <div class="setup-row">
+      <input type="text" id="pantryInput" placeholder="paste your Pantry ID, e.g. 1234abcd-…" />
+      <button id="pantrySave">Connect</button>
+    </div>
+    <button class="skip" id="pantrySkip">Skip — keep local only</button>
+    <div class="share-link" id="shareLink"></div>
+  </div>
 
   <div class="compare">
     <!-- FLORIDA / BUY -->
@@ -567,12 +705,16 @@
   </div>
 
   <div class="footer-actions">
+    <button class="ghost-btn" id="disconnectBtn" style="display:none">Disconnect cloud sync</button>
     <button class="ghost-btn" id="resetBtn">Reset all</button>
   </div>
 </div>
 
 <script>
 const STORAGE_KEY = 'fl-vs-ca-v1';
+const PANTRY_KEY = 'fl-vs-ca-pantry-id';
+const BASKET_NAME = 'house-calc';
+const PANTRY_BASE = 'https://getpantry.cloud/apiv1/pantry';
 const fmt = n => '$' + (Math.round(n) || 0).toLocaleString('en-US');
 
 const flFields = ['fl_price','fl_downAmt','fl_downPct','fl_rate','fl_term','fl_taxPct','fl_insurance','fl_hoa'];
@@ -582,12 +724,17 @@ const els = {};
 [...flFields, ...caFields,
   'fl_extras','fl_totalMonthly','fl_totalAnnual','fl_loanAmount','fl_breakdownBody',
   'ca_extras','ca_totalMonthly','ca_totalAnnual','ca_rentAnnual','ca_breakdownBody',
-  'v_fl','v_fl_yr','v_ca','v_ca_yr','v_delta','v_label','resetBtn'
+  'v_fl','v_fl_yr','v_ca','v_ca_yr','v_delta','v_label','resetBtn',
+  'syncIndicator','syncStatus','refreshBtn',
+  'setupBanner','pantryInput','pantrySave','pantrySkip','shareLink','disconnectBtn'
 ].forEach(id => els[id] = document.getElementById(id));
 
 let flExtras = [];
 let caExtras = [];
 let syncing = false;
+let pantryId = null;
+let cloudSaveTimer = null;
+let suppressCloudSave = false;
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -611,10 +758,144 @@ function loadState() {
   } catch (e) {}
 }
 
-function saveState() {
+function buildState() {
   const s = { flExtras, caExtras };
   [...flFields, ...caFields].forEach(k => s[k] = els[k].value);
+  return s;
+}
+
+function saveState() {
+  const s = buildState();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  if (pantryId && !suppressCloudSave) scheduleCloudSave();
+}
+
+function applyState(s) {
+  if (!s || typeof s !== 'object') return;
+  suppressCloudSave = true;
+  [...flFields, ...caFields].forEach(k => {
+    els[k].value = (s[k] !== undefined && s[k] !== null) ? s[k] : '';
+  });
+  if (els.fl_taxPct.value === '') els.fl_taxPct.value = '1.98';
+  if (els.ca_rent.value === '') els.ca_rent.value = '5400';
+  flExtras = Array.isArray(s.flExtras) ? s.flExtras : [];
+  caExtras = Array.isArray(s.caExtras) ? s.caExtras : [];
+  renderExtras('fl');
+  renderExtras('ca');
+  computeFl();
+  computeCa();
+  const flTotal = parseFloat(els.fl_totalMonthly.textContent.replace(/[^0-9.-]/g,'')) || 0;
+  const caTotal = parseFloat(els.ca_totalMonthly.textContent.replace(/[^0-9.-]/g,'')) || 0;
+  updateVerdict(flTotal, caTotal);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(buildState()));
+  suppressCloudSave = false;
+}
+
+function setSyncStatus(state, text) {
+  els.syncIndicator.classList.remove('synced','syncing','error','offline');
+  if (state) els.syncIndicator.classList.add(state);
+  els.syncStatus.textContent = text;
+}
+
+async function cloudLoad() {
+  if (!pantryId) return null;
+  setSyncStatus('syncing', 'Loading…');
+  try {
+    const r = await fetch(`${PANTRY_BASE}/${pantryId}/basket/${BASKET_NAME}`);
+    if (r.status === 400) {
+      setSyncStatus('synced', 'Synced (new basket)');
+      return null;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    setSyncStatus('synced', 'Synced');
+    return data;
+  } catch (e) {
+    setSyncStatus('error', 'Sync error — using local');
+    return null;
+  }
+}
+
+async function cloudSave() {
+  if (!pantryId) return;
+  setSyncStatus('syncing', 'Saving…');
+  try {
+    const r = await fetch(`${PANTRY_BASE}/${pantryId}/basket/${BASKET_NAME}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(buildState())
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    setSyncStatus('synced', 'Synced');
+  } catch (e) {
+    setSyncStatus('error', 'Save failed — retrying');
+    setTimeout(scheduleCloudSave, 4000);
+  }
+}
+
+function scheduleCloudSave() {
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(cloudSave, 800);
+}
+
+function getPantryFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('p');
+}
+
+function setPantryInUrl(id) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set('p', id);
+  else url.searchParams.delete('p');
+  window.history.replaceState({}, '', url);
+}
+
+function showShareLink() {
+  if (!pantryId) {
+    els.shareLink.classList.remove('visible');
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('p', pantryId);
+  els.shareLink.textContent = 'Share this URL: ' + url.toString();
+  els.shareLink.classList.add('visible');
+}
+
+async function connectPantry(id, opts = {}) {
+  pantryId = id;
+  localStorage.setItem(PANTRY_KEY, id);
+  setPantryInUrl(id);
+  els.refreshBtn.style.display = 'inline';
+  els.disconnectBtn.style.display = 'inline';
+  showShareLink();
+  if (opts.fromBanner) {
+    els.setupBanner.style.display = 'none';
+  }
+  const remote = await cloudLoad();
+  if (remote) {
+    applyState(remote);
+  } else if (opts.pushLocal !== false) {
+    await cloudSave();
+  }
+}
+
+async function refreshFromCloud() {
+  if (!pantryId) return;
+  const remote = await cloudLoad();
+  if (remote) applyState(remote);
+}
+
+function disconnectPantry() {
+  if (!confirm('Disconnect cloud sync? Data stays in your browser.')) return;
+  pantryId = null;
+  localStorage.removeItem(PANTRY_KEY);
+  setPantryInUrl(null);
+  setSyncStatus(null, 'Local only');
+  els.refreshBtn.style.display = 'none';
+  els.disconnectBtn.style.display = 'none';
+  els.setupBanner.style.display = 'block';
+  els.shareLink.classList.remove('visible');
+  els.pantryInput.value = '';
 }
 
 function renderExtras(side) {
@@ -841,10 +1122,44 @@ els.resetBtn.addEventListener('click', () => {
   refresh();
 });
 
-loadState();
-renderExtras('fl');
-renderExtras('ca');
-refresh();
+els.pantrySave.addEventListener('click', async () => {
+  const id = els.pantryInput.value.trim();
+  if (!id) { els.pantryInput.focus(); return; }
+  await connectPantry(id, { fromBanner: true });
+});
+els.pantryInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') els.pantrySave.click();
+});
+els.pantrySkip.addEventListener('click', () => {
+  els.setupBanner.style.display = 'none';
+  localStorage.setItem(PANTRY_KEY + '-skipped', '1');
+});
+els.refreshBtn.addEventListener('click', refreshFromCloud);
+els.disconnectBtn.addEventListener('click', disconnectPantry);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && pantryId) refreshFromCloud();
+});
+
+async function init() {
+  loadState();
+  renderExtras('fl');
+  renderExtras('ca');
+  refresh();
+
+  const urlId = getPantryFromUrl();
+  const storedId = localStorage.getItem(PANTRY_KEY);
+  const skipped = localStorage.getItem(PANTRY_KEY + '-skipped');
+
+  if (urlId) {
+    await connectPantry(urlId, { pushLocal: false });
+  } else if (storedId) {
+    await connectPantry(storedId);
+  } else if (!skipped) {
+    els.setupBanner.style.display = 'block';
+  }
+}
+init();
 </script>
 </body>
 </html>

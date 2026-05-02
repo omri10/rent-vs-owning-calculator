@@ -554,6 +554,94 @@
     display: none;
   }
   .share-link.visible { display: block; }
+
+  /* Income */
+  .income-card {
+    margin-top: 24px;
+    padding: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .income-card h2 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .income-card .hint {
+    margin-bottom: 16px;
+  }
+  .income-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .income-row {
+    display: grid;
+    grid-template-columns: 1fr 220px 32px;
+    gap: 10px;
+    align-items: center;
+  }
+  .income-row .remove-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--danger);
+    border-radius: 8px;
+    width: 32px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .income-row .remove-btn:hover { background: rgba(248,113,113,0.1); }
+  .income-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .income-total-row .lbl {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .income-total-row .num {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--good);
+    letter-spacing: -0.01em;
+  }
+  .add-income-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .add-income-btn:hover { border-color: var(--good); color: var(--good); }
+
+  /* Net gain/loss in verdict */
+  .verdict-rent-row .net-line,
+  .verdict-buy-row .net-line {
+    font-size: 12px;
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+  .net-line .net.gain { color: var(--good); font-weight: 600; }
+  .net-line .net.loss { color: var(--danger); font-weight: 600; }
+  .net-line .net.equal { color: var(--muted); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -690,6 +778,17 @@
     </div>
   </div>
 
+  <div class="income-card">
+    <h2>Monthly income</h2>
+    <div class="hint">Compare housing costs against take-home income (up to two people).</div>
+    <div class="income-list" id="incomeList"></div>
+    <button class="add-income-btn" id="addIncomeBtn">+ Add second person</button>
+    <div class="income-total-row">
+      <span class="lbl">Total monthly income</span>
+      <span class="num" id="incomeTotal">$0</span>
+    </div>
+  </div>
+
   <div class="verdict-card">
     <h2>Comparison</h2>
     <div id="verdict-container"></div>
@@ -721,6 +820,8 @@ const els = {};
 let buyScenarios = [];
 let nextSid = 0;
 let caExtras = [];
+let incomes = [{ name: '', amount: '' }];
+const MAX_INCOMES = 2;
 let syncing = {};
 let pantryId = null;
 let cloudSaveTimer = null;
@@ -1093,19 +1194,37 @@ function computeCa() {
   return total;
 }
 
+function netHtml(income, cost) {
+  if (income <= 0) return '';
+  const net = income - cost;
+  if (Math.abs(net) < 1) {
+    return `<div class="net-line"><span class="net equal">≈ break-even</span> <span style="color:var(--muted)">(${fmt(net * 12)} / yr)</span></div>`;
+  }
+  if (net > 0) {
+    return `<div class="net-line"><span class="net gain">+${fmt(net)}/mo gain</span> <span style="color:var(--muted)">(+${fmt(net * 12)} / yr)</span></div>`;
+  }
+  return `<div class="net-line"><span class="net loss">−${fmt(Math.abs(net))}/mo loss</span> <span style="color:var(--muted)">(−${fmt(Math.abs(net) * 12)} / yr)</span></div>`;
+}
+
 function updateVerdict(buyTotals, caTotal) {
   const vc = els['verdict-container'];
+  const income = totalMonthlyIncome();
+  const incomeTotalEl = document.getElementById('incomeTotal');
+  if (incomeTotalEl) incomeTotalEl.textContent = fmt(income);
+
   let html = `
     <div class="verdict-rent-row">
       <div class="name">Rent</div>
       <div class="amt">${fmt(caTotal)}<span style="font-size:14px;font-weight:400;color:rgba(255,255,255,0.7)"> / mo</span></div>
-      <div class="yr">${fmt(caTotal * 12)} / year</div>
+      <div>
+        <div class="yr">${fmt(caTotal * 12)} / year</div>
+        ${netHtml(income, caTotal)}
+      </div>
     </div>
     <div class="verdict-buy-list">
   `;
   buyTotals.forEach((bt, idx) => {
     const s = buyScenarios[idx];
-    const label = s && s.address ? s.address : `Property ${idx + 1}`;
     const hasAddress = s && s.address;
     const delta = caTotal - bt;
     let deltaHtml = '';
@@ -1116,14 +1235,17 @@ function updateVerdict(buyTotals, caTotal) {
     } else {
       deltaHtml = `<span class="delta costlier">+${fmt(Math.abs(delta))}/mo more</span>`;
     }
+    const netLine = netHtml(income, bt);
     html += `
       <div class="verdict-buy-row">
         <div>
           <div class="name">${hasAddress ? escapeHtml(s.address) : `Property ${idx + 1}`}</div>
-          ${hasAddress ? '' : ''}
         </div>
         <div class="amt">${fmt(bt)}<span style="font-size:13px;font-weight:400;color:var(--muted)"> / mo</span></div>
-        ${deltaHtml}
+        <div>
+          ${deltaHtml}
+          ${netLine}
+        </div>
       </div>
     `;
   });
@@ -1148,6 +1270,34 @@ function refresh() {
   const caTotal = computeCa();
   updateVerdict(buyTotals, caTotal);
   saveState();
+}
+
+// Income rendering
+function renderIncomes() {
+  const container = document.getElementById('incomeList');
+  if (!container) return;
+  container.innerHTML = '';
+  incomes.forEach((inc, i) => {
+    const row = document.createElement('div');
+    row.className = 'income-row';
+    const placeholder = i === 0 ? 'Person 1 (e.g. Alex)' : 'Person 2 (e.g. Sam)';
+    row.innerHTML = `
+      <input type="text" data-ii="${i}" data-if="name" placeholder="${placeholder}" value="${escapeHtml(inc.name || '')}" />
+      <div class="input-wrap">
+        <span class="prefix">$</span>
+        <input type="number" data-ii="${i}" data-if="amount" class="with-prefix with-suffix" placeholder="0" min="0" step="100" value="${inc.amount ?? ''}" />
+        <span class="suffix">/ mo</span>
+      </div>
+      ${incomes.length > 1 ? `<button class="remove-btn" data-ii="${i}" data-if="remove" title="Remove">×</button>` : '<div></div>'}
+    `;
+    container.appendChild(row);
+  });
+  const addBtn = document.getElementById('addIncomeBtn');
+  if (addBtn) addBtn.style.display = incomes.length >= MAX_INCOMES ? 'none' : '';
+}
+
+function totalMonthlyIncome() {
+  return incomes.reduce((acc, inc) => acc + (parseFloat(inc.amount) || 0), 0);
 }
 
 // CA extras rendering
@@ -1180,6 +1330,7 @@ function buildState() {
   return {
     buyScenarios: buyScenarios.map(s => ({...s})),
     caExtras,
+    incomes,
     ...Object.fromEntries(caFields.map(k => [k, els[k] ? els[k].value : '']))
   };
 }
@@ -1202,6 +1353,11 @@ function applyState(s, isInit) {
   });
   if (els['ca_rent'] && els['ca_rent'].value === '') els['ca_rent'].value = '5400';
   caExtras = Array.isArray(s.caExtras) ? s.caExtras : [];
+  if (Array.isArray(s.incomes) && s.incomes.length > 0) {
+    incomes = s.incomes.slice(0, MAX_INCOMES).map(i => ({ name: i.name || '', amount: i.amount ?? '' }));
+  } else {
+    incomes = [{ name: '', amount: '' }];
+  }
 
   // Migrate old fl_* format
   if (!s.buyScenarios && (s.fl_price !== undefined || s.fl_rate !== undefined)) {
@@ -1228,6 +1384,7 @@ function applyState(s, isInit) {
 
   renderBuyScenarios();
   renderCaExtras();
+  renderIncomes();
 
   buyScenarios.forEach(s => computeScenario(s));
   const caTotal = computeCa();
@@ -1490,16 +1647,44 @@ document.querySelector('[data-add="ca"]').addEventListener('click', () => {
   refresh();
 });
 
+// Income handlers
+document.getElementById('incomeList').addEventListener('input', e => {
+  const t = e.target;
+  const i = t.dataset.ii !== undefined ? +t.dataset.ii : null;
+  const f = t.dataset.if;
+  if (i !== null && f && incomes[i]) {
+    incomes[i][f] = t.value;
+    refresh();
+  }
+});
+document.getElementById('incomeList').addEventListener('click', e => {
+  const t = e.target.closest('[data-if="remove"]');
+  if (!t) return;
+  const i = +t.dataset.ii;
+  incomes.splice(i, 1);
+  if (incomes.length === 0) incomes = [{ name: '', amount: '' }];
+  renderIncomes();
+  refresh();
+});
+document.getElementById('addIncomeBtn').addEventListener('click', () => {
+  if (incomes.length >= MAX_INCOMES) return;
+  incomes.push({ name: '', amount: '' });
+  renderIncomes();
+  refresh();
+});
+
 els['resetBtn'].addEventListener('click', () => {
   if (!confirm('Clear all inputs?')) return;
   localStorage.removeItem(STORAGE_KEY);
   nextSid = 0;
   buyScenarios = [newScenario()];
   caExtras = [];
+  incomes = [{ name: '', amount: '' }];
   caFields.forEach(k => { if (els[k]) els[k].value = ''; });
   if (els['ca_rent']) els['ca_rent'].value = '5400';
   renderBuyScenarios();
   renderCaExtras();
+  renderIncomes();
   refresh();
 });
 
@@ -1532,12 +1717,14 @@ async function init() {
       buyScenarios = [newScenario()];
       renderBuyScenarios();
       renderCaExtras();
+      renderIncomes();
       refresh();
     }
   } else {
     buyScenarios = [newScenario()];
     renderBuyScenarios();
     renderCaExtras();
+    renderIncomes();
     refresh();
   }
 

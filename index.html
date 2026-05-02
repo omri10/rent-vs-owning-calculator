@@ -179,6 +179,36 @@
   .summary.onetime {
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   }
+  .mortgage-item {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .mortgage-item:last-of-type { margin-bottom: 12px; }
+  .mortgage-item-header {
+    display: grid;
+    grid-template-columns: 1fr 32px;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .mortgage-item-header.no-remove { grid-template-columns: 1fr; }
+  .mortgage-item .remove-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--danger);
+    border-radius: 8px;
+    width: 32px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mortgage-item .remove-btn:hover { background: rgba(248,113,113,0.1); }
   .summary.onetime table.breakdown th,
   .summary.onetime table.breakdown td {
     border-bottom-color: rgba(255,255,255,0.2);
@@ -840,21 +870,36 @@ function numEl(el) {
   return numVal(el ? el.value : '');
 }
 
+function newMortgage(defaults) {
+  return Object.assign({ type: '', rate: '', term: '' }, defaults || {});
+}
+
 function newScenario(defaults) {
-  return Object.assign({
+  const sc = Object.assign({
     id: nextSid++,
     address: '',
     price: '',
     downAmt: '',
     downPct: '',
-    rate: '',
-    term: '',
     taxPct: '1.98',
     insurance: '',
     hoa: '',
     extras: [],
-    oneTimePayments: []
+    oneTimePayments: [],
+    mortgages: []
   }, defaults || {});
+  if (!Array.isArray(sc.mortgages)) sc.mortgages = [];
+  if (sc.mortgages.length === 0 && (sc.rate || sc.term)) {
+    sc.mortgages = [newMortgage({ rate: sc.rate || '', term: sc.term || '' })];
+  }
+  if (sc.mortgages.length === 0) {
+    sc.mortgages = [newMortgage()];
+  } else {
+    sc.mortgages = sc.mortgages.map(m => newMortgage(m));
+  }
+  delete sc.rate;
+  delete sc.term;
+  return sc;
 }
 
 function scenarioFieldEl(sid, field) {
@@ -884,6 +929,45 @@ function renderScenarioExtras(sid) {
       <button class="remove-btn" data-sid="${sid}" data-ei="${i}" data-ef="remove" title="Remove">×</button>
     `;
     container.appendChild(row);
+  });
+}
+
+function renderScenarioMortgages(sid) {
+  const s = buyScenarios.find(x => x.id === sid);
+  if (!s) return;
+  const container = document.querySelector(`[data-mortgages-sid="${sid}"]`);
+  if (!container) return;
+  if (!Array.isArray(s.mortgages) || s.mortgages.length === 0) {
+    s.mortgages = [newMortgage()];
+  }
+  container.innerHTML = '';
+  const showRemove = s.mortgages.length > 1;
+  s.mortgages.forEach((m, i) => {
+    const item = document.createElement('div');
+    item.className = 'mortgage-item';
+    item.innerHTML = `
+      <div class="mortgage-item-header${showRemove ? '' : ' no-remove'}">
+        <input type="text" data-sid="${sid}" data-mi="${i}" data-mf="type" placeholder="Mortgage type (e.g. 30-year fixed, ARM 5/1, FHA)" value="${escapeHtml(m.type || '')}" />
+        ${showRemove ? `<button class="remove-btn" data-sid="${sid}" data-mi="${i}" data-mf="remove" title="Remove">×</button>` : ''}
+      </div>
+      <div class="two-col">
+        <div class="row">
+          <label>Interest rate</label>
+          <div class="input-wrap">
+            <input type="number" data-sid="${sid}" data-mi="${i}" data-mf="rate" class="with-suffix" placeholder="6.5" min="0" max="30" step="0.01" value="${m.rate ?? ''}" />
+            <span class="suffix">%</span>
+          </div>
+        </div>
+        <div class="row">
+          <label>Loan term</label>
+          <div class="input-wrap">
+            <input type="number" data-sid="${sid}" data-mi="${i}" data-mf="term" class="with-suffix" placeholder="30" min="1" max="50" step="1" value="${m.term ?? ''}" />
+            <span class="suffix">yrs</span>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(item);
   });
 }
 
@@ -954,22 +1038,12 @@ function renderBuyScenarios() {
             </div>
           </div>
         </div>
-        <div class="two-col">
-          <div class="row">
-            <label>Interest rate</label>
-            <div class="input-wrap">
-              <input type="number" data-sid="${s.id}" data-f="rate" class="with-suffix" placeholder="6.5" min="0" max="30" step="0.01" value="${s.rate}" />
-              <span class="suffix">%</span>
-            </div>
-          </div>
-          <div class="row">
-            <label>Loan term</label>
-            <div class="input-wrap">
-              <input type="number" data-sid="${s.id}" data-f="term" class="with-suffix" placeholder="30" min="1" max="50" step="1" value="${s.term}" />
-              <span class="suffix">yrs</span>
-            </div>
-          </div>
-        </div>
+      </div>
+
+      <div class="card">
+        <h3>Mortgage <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--muted);letter-spacing:0">(add multiple to compare options)</span></h3>
+        <div data-mortgages-sid="${s.id}"></div>
+        <button class="add-btn col-fl-color" data-add-mortgage-sid="${s.id}">+ Add mortgage option</button>
       </div>
 
       <div class="card">
@@ -1011,29 +1085,7 @@ function renderBuyScenarios() {
         <button class="add-btn col-fl-color" data-add-onetime-sid="${s.id}">+ Add one-time payment</button>
       </div>
 
-      <div class="card summary fl">
-        <h3>Estimated monthly cost</h3>
-        <div class="big-number" id="buy_${s.id}_totalMonthly">$0</div>
-        <div class="big-label">per month, all-in</div>
-        <div class="summary-split">
-          <div>
-            <div class="num" id="buy_${s.id}_totalAnnual">$0</div>
-            <div class="lbl">per year</div>
-          </div>
-          <div>
-            <div class="num" id="buy_${s.id}_loanAmount">$0</div>
-            <div class="lbl">loan amount</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Monthly breakdown</h3>
-        <table class="breakdown">
-          <thead><tr><th>Item</th><th class="num">Monthly</th><th class="num">Annual</th></tr></thead>
-          <tbody id="buy_${s.id}_breakdownBody"></tbody>
-        </table>
-      </div>
+      <div data-summaries-sid="${s.id}" style="display:flex;flex-direction:column;gap:16px"></div>
 
       <div class="card summary onetime" id="buy_${s.id}_oneTimeSummary" style="display:none">
         <h3>One-time payments total</h3>
@@ -1046,6 +1098,7 @@ function renderBuyScenarios() {
       </div>
     `;
     container.appendChild(wrap);
+    renderScenarioMortgages(s.id);
     renderScenarioExtras(s.id);
     renderScenarioOneTimePayments(s.id);
   });
@@ -1099,46 +1152,39 @@ function periodToMonthly(amt, period) {
 function computeScenario(s) {
   const price = numVal(s.price);
   const down = numVal(s.downAmt);
-  const rate = numVal(s.rate);
-  const years = numVal(s.term);
   const taxPct = numVal(s.taxPct || '1.98');
   const insAnnual = numVal(s.insurance);
   const hoaMonthly = numVal(s.hoa);
 
   const loan = Math.max(0, price - down);
-  const mortgageMonthly = monthlyMortgage(loan, rate, years);
   const taxMonthly = (price * (taxPct / 100)) / 12;
   const insMonthly = insAnnual / 12;
 
-  const rows = [
-    { label: 'Mortgage (P&I)', monthly: mortgageMonthly },
+  const fixedRows = [
     { label: `Property tax (${taxPct || 0}%)`, monthly: taxMonthly },
     { label: 'Homeowners insurance', monthly: insMonthly },
   ];
-  if (hoaMonthly > 0) rows.push({ label: 'HOA', monthly: hoaMonthly });
+  if (hoaMonthly > 0) fixedRows.push({ label: 'HOA', monthly: hoaMonthly });
   (s.extras || []).forEach(ex => {
     const amt = parseFloat(ex.amount) || 0;
     if (!amt && !ex.name) return;
-    rows.push({ label: ex.name || 'Unnamed', monthly: periodToMonthly(amt, ex.period) });
+    fixedRows.push({ label: ex.name || 'Unnamed', monthly: periodToMonthly(amt, ex.period) });
   });
 
-  const total = rows.reduce((acc, r) => acc + r.monthly, 0);
-
-  const totalMonthlyEl = document.getElementById(`buy_${s.id}_totalMonthly`);
-  const totalAnnualEl = document.getElementById(`buy_${s.id}_totalAnnual`);
-  const loanAmountEl = document.getElementById(`buy_${s.id}_loanAmount`);
-  const breakdownBodyEl = document.getElementById(`buy_${s.id}_breakdownBody`);
-
-  if (totalMonthlyEl) totalMonthlyEl.textContent = fmt(total);
-  if (totalAnnualEl) totalAnnualEl.textContent = fmt(total * 12);
-  if (loanAmountEl) loanAmountEl.textContent = fmt(loan);
-  if (breakdownBodyEl) {
-    breakdownBodyEl.innerHTML = rows.map(r => `
-      <tr><td>${escapeHtml(r.label)}</td><td class="num">${fmt(r.monthly)}</td><td class="num">${fmt(r.monthly * 12)}</td></tr>
-    `).join('') + `
-      <tr class="total"><td>Total</td><td class="num">${fmt(total)}</td><td class="num">${fmt(total * 12)}</td></tr>
-    `;
+  if (!Array.isArray(s.mortgages) || s.mortgages.length === 0) {
+    s.mortgages = [newMortgage()];
   }
+
+  const results = s.mortgages.map(m => {
+    const rate = numVal(m.rate);
+    const years = numVal(m.term);
+    const piMonthly = monthlyMortgage(loan, rate, years);
+    const rows = [{ label: 'Mortgage (P&I)', monthly: piMonthly }, ...fixedRows];
+    const total = rows.reduce((acc, r) => acc + r.monthly, 0);
+    return { type: m.type || '', total, rows };
+  });
+
+  renderScenarioSummaries(s.id, results, loan);
 
   // One-time payments — separate, does not affect monthly total
   const oneTimeRows = (s.oneTimePayments || []).filter(ot => {
@@ -1161,7 +1207,47 @@ function computeScenario(s) {
     `;
   }
 
-  return total;
+  return results;
+}
+
+function renderScenarioSummaries(sid, results, loan) {
+  const container = document.querySelector(`[data-summaries-sid="${sid}"]`);
+  if (!container) return;
+  container.innerHTML = results.map(r => {
+    const titleSuffix = r.type
+      ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400;color:rgba(255,255,255,0.85)">(${escapeHtml(r.type)})</span>`
+      : '';
+    const breakdownSuffix = r.type
+      ? ` <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--muted);letter-spacing:0">(${escapeHtml(r.type)})</span>`
+      : '';
+    return `
+      <div class="card summary fl">
+        <h3>Estimated monthly cost${titleSuffix}</h3>
+        <div class="big-number">${fmt(r.total)}</div>
+        <div class="big-label">per month, all-in</div>
+        <div class="summary-split">
+          <div>
+            <div class="num">${fmt(r.total * 12)}</div>
+            <div class="lbl">per year</div>
+          </div>
+          <div>
+            <div class="num">${fmt(loan)}</div>
+            <div class="lbl">loan amount</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Monthly breakdown${breakdownSuffix}</h3>
+        <table class="breakdown">
+          <thead><tr><th>Item</th><th class="num">Monthly</th><th class="num">Annual</th></tr></thead>
+          <tbody>
+            ${r.rows.map(row => `<tr><td>${escapeHtml(row.label)}</td><td class="num">${fmt(row.monthly)}</td><td class="num">${fmt(row.monthly * 12)}</td></tr>`).join('')}
+            <tr class="total"><td>Total</td><td class="num">${fmt(r.total)}</td><td class="num">${fmt(r.total * 12)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
 }
 
 function computeCa() {
@@ -1206,11 +1292,22 @@ function netHtml(income, cost) {
   return `<div class="net-line"><span class="net loss">−${fmt(Math.abs(net))}/mo loss</span> <span style="color:var(--muted)">(−${fmt(Math.abs(net) * 12)} / yr)</span></div>`;
 }
 
-function updateVerdict(buyTotals, caTotal) {
+function updateVerdict(buyResults, caTotal) {
   const vc = els['verdict-container'];
   const income = totalMonthlyIncome();
   const incomeTotalEl = document.getElementById('incomeTotal');
   if (incomeTotalEl) incomeTotalEl.textContent = fmt(income);
+
+  // Flatten to one tile per (property, mortgage)
+  const tiles = [];
+  buyScenarios.forEach((s, sIdx) => {
+    const baseLabel = s.address || `Property ${sIdx + 1}`;
+    const results = buyResults[sIdx] || [];
+    results.forEach(r => {
+      const label = r.type ? `${baseLabel} (${r.type})` : baseLabel;
+      tiles.push({ label, total: r.total });
+    });
+  });
 
   let html = `
     <div class="verdict-rent-row">
@@ -1223,10 +1320,8 @@ function updateVerdict(buyTotals, caTotal) {
     </div>
     <div class="verdict-buy-list">
   `;
-  buyTotals.forEach((bt, idx) => {
-    const s = buyScenarios[idx];
-    const hasAddress = s && s.address;
-    const delta = caTotal - bt;
+  tiles.forEach(tile => {
+    const delta = caTotal - tile.total;
     let deltaHtml = '';
     if (Math.abs(delta) < 1) {
       deltaHtml = `<span class="delta equal">≈ equal</span>`;
@@ -1235,13 +1330,13 @@ function updateVerdict(buyTotals, caTotal) {
     } else {
       deltaHtml = `<span class="delta costlier">+${fmt(Math.abs(delta))}/mo more</span>`;
     }
-    const netLine = netHtml(income, bt);
+    const netLine = netHtml(income, tile.total);
     html += `
       <div class="verdict-buy-row">
         <div>
-          <div class="name">${hasAddress ? escapeHtml(s.address) : `Property ${idx + 1}`}</div>
+          <div class="name">${escapeHtml(tile.label)}</div>
         </div>
-        <div class="amt">${fmt(bt)}<span style="font-size:13px;font-weight:400;color:var(--muted)"> / mo</span></div>
+        <div class="amt">${fmt(tile.total)}<span style="font-size:13px;font-weight:400;color:var(--muted)"> / mo</span></div>
         <div>
           ${deltaHtml}
           ${netLine}
@@ -1250,14 +1345,14 @@ function updateVerdict(buyTotals, caTotal) {
     `;
   });
   html += '</div>';
-  if (buyTotals.length === 0 && caTotal === 0) {
+  if (tiles.length === 0 && caTotal === 0) {
     html += `<div style="color:var(--muted);font-size:14px;text-align:center;padding:8px 0">Enter values to compare</div>`;
   }
   vc.innerHTML = html;
 }
 
 function readScenarioFromDOM(s) {
-  const fields = ['address','price','downAmt','downPct','rate','term','taxPct','insurance','hoa'];
+  const fields = ['address','price','downAmt','downPct','taxPct','insurance','hoa'];
   fields.forEach(f => {
     const el = scenarioFieldEl(s.id, f);
     if (el) s[f] = el.value;
@@ -1266,9 +1361,9 @@ function readScenarioFromDOM(s) {
 
 function refresh() {
   buyScenarios.forEach(s => readScenarioFromDOM(s));
-  const buyTotals = buyScenarios.map(s => computeScenario(s));
+  const buyResults = buyScenarios.map(s => computeScenario(s));
   const caTotal = computeCa();
-  updateVerdict(buyTotals, caTotal);
+  updateVerdict(buyResults, caTotal);
   saveState();
 }
 
@@ -1365,8 +1460,7 @@ function applyState(s, isInit) {
       price: s.fl_price || '',
       downAmt: s.fl_downAmt || '',
       downPct: s.fl_downPct || '',
-      rate: s.fl_rate || '',
-      term: s.fl_term || '',
+      mortgages: [{ type: '', rate: s.fl_rate || '', term: s.fl_term || '' }],
       taxPct: s.fl_taxPct || '1.98',
       insurance: s.fl_insurance || '',
       hoa: s.fl_hoa || '',
@@ -1386,13 +1480,9 @@ function applyState(s, isInit) {
   renderCaExtras();
   renderIncomes();
 
-  buyScenarios.forEach(s => computeScenario(s));
+  const buyResults = buyScenarios.map(s => computeScenario(s));
   const caTotal = computeCa();
-  const buyTotals = buyScenarios.map(s => {
-    const el = document.getElementById(`buy_${s.id}_totalMonthly`);
-    return el ? (parseFloat(el.textContent.replace(/[^0-9.-]/g,'')) || 0) : 0;
-  });
-  updateVerdict(buyTotals, caTotal);
+  updateVerdict(buyResults, caTotal);
 
   if (!isInit) localStorage.setItem(STORAGE_KEY, JSON.stringify(buildState()));
   suppressCloudSave = false;
@@ -1509,6 +1599,17 @@ document.getElementById('buy-scenarios-container').addEventListener('input', e =
   const ef = t.dataset.ef;
   const oti = t.dataset.oti !== undefined ? +t.dataset.oti : null;
   const otf = t.dataset.otf;
+  const mi = t.dataset.mi !== undefined ? +t.dataset.mi : null;
+  const mf = t.dataset.mf;
+
+  if (sid !== null && mf && mi !== null) {
+    // mortgage field
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s || !s.mortgages || !s.mortgages[mi]) return;
+    s.mortgages[mi][mf] = t.value;
+    refresh();
+    return;
+  }
 
   if (sid !== null && f) {
     // scenario field
@@ -1569,6 +1670,30 @@ document.getElementById('buy-scenarios-container').addEventListener('click', e =
     if (!s) return;
     s.extras.push({ name: '', amount: '', period: 'monthly' });
     renderScenarioExtras(sid);
+    refresh();
+    return;
+  }
+
+  const addMortgageBtn = e.target.closest('[data-add-mortgage-sid]');
+  if (addMortgageBtn) {
+    const sid = +addMortgageBtn.dataset.addMortgageSid;
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s) return;
+    if (!Array.isArray(s.mortgages)) s.mortgages = [];
+    s.mortgages.push(newMortgage());
+    renderScenarioMortgages(sid);
+    refresh();
+    return;
+  }
+
+  const removeMortgageBtn = e.target.closest('[data-mf="remove"]');
+  if (removeMortgageBtn) {
+    const sid = +removeMortgageBtn.dataset.sid;
+    const mi = +removeMortgageBtn.dataset.mi;
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s || !Array.isArray(s.mortgages) || s.mortgages.length <= 1) return;
+    s.mortgages.splice(mi, 1);
+    renderScenarioMortgages(sid);
     refresh();
     return;
   }

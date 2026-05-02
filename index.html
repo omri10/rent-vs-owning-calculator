@@ -156,6 +156,36 @@
     gap: 8px;
     align-items: center;
   }
+  .onetime-row {
+    display: grid;
+    grid-template-columns: 1fr 140px 32px;
+    gap: 8px;
+    align-items: center;
+  }
+  .onetime-row .remove-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--danger);
+    border-radius: 8px;
+    width: 32px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .onetime-row .remove-btn:hover { background: rgba(248,113,113,0.1); }
+  .summary.onetime {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  }
+  .summary.onetime table.breakdown th,
+  .summary.onetime table.breakdown td {
+    border-bottom-color: rgba(255,255,255,0.2);
+  }
+  .summary.onetime table.breakdown tr.total td {
+    border-top-color: rgba(255,255,255,0.4);
+  }
   .extra-row .remove-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -721,7 +751,8 @@ function newScenario(defaults) {
     taxPct: '1.98',
     insurance: '',
     hoa: '',
-    extras: []
+    extras: [],
+    oneTimePayments: []
   }, defaults || {});
 }
 
@@ -750,6 +781,27 @@ function renderScenarioExtras(sid) {
         <option value="yearly" ${ex.period==='yearly'?'selected':''}>yearly</option>
       </select>
       <button class="remove-btn" data-sid="${sid}" data-ei="${i}" data-ef="remove" title="Remove">×</button>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function renderScenarioOneTimePayments(sid) {
+  const s = buyScenarios.find(x => x.id === sid);
+  if (!s) return;
+  const container = document.querySelector(`[data-onetime-sid="${sid}"]`);
+  if (!container) return;
+  container.innerHTML = '';
+  (s.oneTimePayments || []).forEach((ot, i) => {
+    const row = document.createElement('div');
+    row.className = 'onetime-row';
+    row.innerHTML = `
+      <input type="text" data-sid="${sid}" data-oti="${i}" data-otf="name" placeholder="e.g. Closing costs, Container" value="${escapeHtml(ot.name || '')}" />
+      <div class="input-wrap">
+        <span class="prefix">$</span>
+        <input type="number" class="with-prefix" data-sid="${sid}" data-oti="${i}" data-otf="amount" placeholder="0" min="0" step="100" value="${ot.amount ?? ''}" />
+      </div>
+      <button class="remove-btn" data-sid="${sid}" data-oti="${i}" data-otf="remove" title="Remove">×</button>
     `;
     container.appendChild(row);
   });
@@ -852,6 +904,12 @@ function renderBuyScenarios() {
         <button class="add-btn col-fl-color" data-add-extras-sid="${s.id}">+ Add expense (gardener, pool, pest control…)</button>
       </div>
 
+      <div class="card">
+        <h3>One-time payments <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--muted);letter-spacing:0">(closing costs, container, moving…)</span></h3>
+        <div data-onetime-sid="${s.id}" class="extras-list"></div>
+        <button class="add-btn col-fl-color" data-add-onetime-sid="${s.id}">+ Add one-time payment</button>
+      </div>
+
       <div class="card summary fl">
         <h3>Estimated monthly cost</h3>
         <div class="big-number" id="buy_${s.id}_totalMonthly">$0</div>
@@ -875,9 +933,20 @@ function renderBuyScenarios() {
           <tbody id="buy_${s.id}_breakdownBody"></tbody>
         </table>
       </div>
+
+      <div class="card summary onetime" id="buy_${s.id}_oneTimeSummary" style="display:none">
+        <h3>One-time payments total</h3>
+        <div class="big-number" id="buy_${s.id}_oneTimeTotal">$0</div>
+        <div class="big-label">upfront, not included in monthly</div>
+        <table class="breakdown" id="buy_${s.id}_oneTimeTable" style="margin-top:14px;color:white">
+          <thead><tr><th style="color:rgba(255,255,255,0.85)">Item</th><th class="num" style="color:rgba(255,255,255,0.85)">Amount</th></tr></thead>
+          <tbody id="buy_${s.id}_oneTimeBody"></tbody>
+        </table>
+      </div>
     `;
     container.appendChild(wrap);
     renderScenarioExtras(s.id);
+    renderScenarioOneTimePayments(s.id);
   });
 
   // Style the add-extras buttons like .col.fl .add-btn
@@ -967,6 +1036,27 @@ function computeScenario(s) {
       <tr><td>${escapeHtml(r.label)}</td><td class="num">${fmt(r.monthly)}</td><td class="num">${fmt(r.monthly * 12)}</td></tr>
     `).join('') + `
       <tr class="total"><td>Total</td><td class="num">${fmt(total)}</td><td class="num">${fmt(total * 12)}</td></tr>
+    `;
+  }
+
+  // One-time payments — separate, does not affect monthly total
+  const oneTimeRows = (s.oneTimePayments || []).filter(ot => {
+    const amt = parseFloat(ot.amount) || 0;
+    return amt > 0 || ot.name;
+  });
+  const oneTimeTotal = oneTimeRows.reduce((acc, ot) => acc + (parseFloat(ot.amount) || 0), 0);
+  const oneTimeSummaryEl = document.getElementById(`buy_${s.id}_oneTimeSummary`);
+  const oneTimeTotalEl = document.getElementById(`buy_${s.id}_oneTimeTotal`);
+  const oneTimeBodyEl = document.getElementById(`buy_${s.id}_oneTimeBody`);
+  if (oneTimeSummaryEl) {
+    oneTimeSummaryEl.style.display = oneTimeRows.length > 0 ? '' : 'none';
+  }
+  if (oneTimeTotalEl) oneTimeTotalEl.textContent = fmt(oneTimeTotal);
+  if (oneTimeBodyEl) {
+    oneTimeBodyEl.innerHTML = oneTimeRows.map(ot => `
+      <tr><td>${escapeHtml(ot.name || 'Unnamed')}</td><td class="num">${fmt(parseFloat(ot.amount) || 0)}</td></tr>
+    `).join('') + `
+      <tr class="total"><td>Total</td><td class="num">${fmt(oneTimeTotal)}</td></tr>
     `;
   }
 
@@ -1260,6 +1350,8 @@ document.getElementById('buy-scenarios-container').addEventListener('input', e =
   const f = t.dataset.f;
   const ei = t.dataset.ei !== undefined ? +t.dataset.ei : null;
   const ef = t.dataset.ef;
+  const oti = t.dataset.oti !== undefined ? +t.dataset.oti : null;
+  const otf = t.dataset.otf;
 
   if (sid !== null && f) {
     // scenario field
@@ -1268,6 +1360,15 @@ document.getElementById('buy-scenarios-container').addEventListener('input', e =
     if (f === 'downAmt') syncDownPayment(sid, 'amt');
     else if (f === 'downPct') syncDownPayment(sid, 'pct');
     else if (f === 'price') syncDownPayment(sid, 'price');
+    refresh();
+    return;
+  }
+
+  if (sid !== null && otf && oti !== null) {
+    // one-time payment field
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s || !s.oneTimePayments[oti]) return;
+    s.oneTimePayments[oti][otf] = t.value;
     refresh();
     return;
   }
@@ -1311,6 +1412,30 @@ document.getElementById('buy-scenarios-container').addEventListener('click', e =
     if (!s) return;
     s.extras.push({ name: '', amount: '', period: 'monthly' });
     renderScenarioExtras(sid);
+    refresh();
+    return;
+  }
+
+  const addOneTimeBtn = e.target.closest('[data-add-onetime-sid]');
+  if (addOneTimeBtn) {
+    const sid = +addOneTimeBtn.dataset.addOnetimeSid;
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s) return;
+    if (!Array.isArray(s.oneTimePayments)) s.oneTimePayments = [];
+    s.oneTimePayments.push({ name: '', amount: '' });
+    renderScenarioOneTimePayments(sid);
+    refresh();
+    return;
+  }
+
+  const removeOneTimeBtn = e.target.closest('[data-otf="remove"]');
+  if (removeOneTimeBtn) {
+    const sid = +removeOneTimeBtn.dataset.sid;
+    const oti = +removeOneTimeBtn.dataset.oti;
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s) return;
+    s.oneTimePayments.splice(oti, 1);
+    renderScenarioOneTimePayments(sid);
     refresh();
     return;
   }

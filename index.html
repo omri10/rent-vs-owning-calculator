@@ -672,6 +672,61 @@
   .net-line .net.gain { color: var(--good); font-weight: 600; }
   .net-line .net.loss { color: var(--danger); font-weight: 600; }
   .net-line .net.equal { color: var(--muted); font-weight: 600; }
+
+  /* Amortization chart */
+  .amort-chart-wrap {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .amort-chart-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .amort-legend {
+    display: flex;
+    gap: 14px;
+  }
+  .amort-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .amort-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  canvas.amort-canvas {
+    display: block;
+    width: 100%;
+    border-radius: 6px;
+  }
+
+  /* Breakdown sub-total */
+  table.breakdown tr.sub-total td {
+    font-size: 12px;
+    color: var(--muted);
+    border-bottom: 1px dashed var(--border);
+    padding: 6px 6px;
+    font-style: italic;
+  }
+  table.breakdown tr.sub-total td.num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
 </style>
 </head>
 <body>
@@ -1210,16 +1265,112 @@ function computeScenario(s) {
   return results;
 }
 
+function drawAmortizationChart(canvas, principal, annualRatePct, years) {
+  if (!canvas || principal <= 0 || years <= 0 || annualRatePct < 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 400;
+  const H = 160;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const r = (annualRatePct / 100) / 12;
+  const n = years * 12;
+  const payment = r === 0 ? principal / n : principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+
+  // Compute yearly principal & interest totals
+  const yearlyData = [];
+  let balance = principal;
+  for (let y = 0; y < years; y++) {
+    let yearInterest = 0, yearPrincipal = 0;
+    for (let m = 0; m < 12; m++) {
+      const intPart = balance * r;
+      const prinPart = Math.min(payment - intPart, balance);
+      yearInterest += intPart;
+      yearPrincipal += prinPart;
+      balance = Math.max(0, balance - prinPart);
+    }
+    yearlyData.push({ interest: yearInterest, principal: yearPrincipal });
+  }
+
+  const pad = { top: 10, right: 8, bottom: 24, left: 52 };
+  const chartW = W - pad.left - pad.right;
+  const chartH = H - pad.top - pad.bottom;
+  const maxVal = Math.max(...yearlyData.map(d => d.interest + d.principal));
+  const barGap = Math.max(1, Math.floor(chartW / years * 0.15));
+  const barW = (chartW - barGap * (years - 1)) / years;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+  ctx.lineWidth = 1;
+  const gridLines = 4;
+  for (let i = 0; i <= gridLines; i++) {
+    const y = pad.top + chartH - (i / gridLines) * chartH;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke();
+    if (i > 0) {
+      ctx.fillStyle = 'rgba(148,163,184,0.5)';
+      ctx.font = `10px -apple-system, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText('$' + Math.round(maxVal * i / gridLines / 1000) + 'k', pad.left - 4, y + 3);
+    }
+  }
+
+  // Bars
+  yearlyData.forEach((d, i) => {
+    const x = pad.left + i * (barW + barGap);
+    const intH = (d.interest / maxVal) * chartH;
+    const prinH = (d.principal / maxVal) * chartH;
+
+    // Interest (bottom)
+    ctx.fillStyle = 'rgba(248,113,113,0.75)';
+    ctx.beginPath();
+    ctx.roundRect(x, pad.top + chartH - intH, barW, intH, [2, 2, 0, 0]);
+    ctx.fill();
+
+    // Principal (top)
+    ctx.fillStyle = 'rgba(56,189,248,0.8)';
+    ctx.beginPath();
+    ctx.roundRect(x, pad.top + chartH - intH - prinH, barW, prinH, [2, 2, 0, 0]);
+    ctx.fill();
+
+    // X-axis label (every 5 years, always last)
+    if ((i + 1) % 5 === 0 || i === 0 || i === years - 1) {
+      ctx.fillStyle = 'rgba(148,163,184,0.6)';
+      ctx.font = `10px -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('yr ' + (i + 1), x + barW / 2, H - 6);
+    }
+  });
+}
+
 function renderScenarioSummaries(sid, results, loan) {
   const container = document.querySelector(`[data-summaries-sid="${sid}"]`);
   if (!container) return;
-  container.innerHTML = results.map(r => {
+
+  const s = buyScenarios.find(x => x.id === sid);
+  container.innerHTML = results.map((r, ri) => {
     const titleSuffix = r.type
       ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400;color:rgba(255,255,255,0.85)">(${escapeHtml(r.type)})</span>`
       : '';
     const breakdownSuffix = r.type
       ? ` <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--muted);letter-spacing:0">(${escapeHtml(r.type)})</span>`
       : '';
+
+    // Split rows into mortgage/insurance/tax group vs other
+    const coreRows = r.rows.slice(0, 3); // P&I, tax, insurance (first 3 always)
+    const otherRows = r.rows.slice(3);
+    const coreTotal = coreRows.reduce((acc, row) => acc + row.monthly, 0);
+
+    const coreRowsHtml = coreRows.map(row =>
+      `<tr><td>${escapeHtml(row.label)}</td><td class="num">${fmt(row.monthly)}</td><td class="num">${fmt(row.monthly * 12)}</td></tr>`
+    ).join('');
+    const subTotalHtml = `<tr class="sub-total"><td>↳ Mortgage, insurance &amp; taxes</td><td class="num">${fmt(coreTotal)}</td><td class="num">${fmt(coreTotal * 12)}</td></tr>`;
+    const otherRowsHtml = otherRows.map(row =>
+      `<tr><td>${escapeHtml(row.label)}</td><td class="num">${fmt(row.monthly)}</td><td class="num">${fmt(row.monthly * 12)}</td></tr>`
+    ).join('');
+
     return `
       <div class="card summary fl">
         <h3>Estimated monthly cost${titleSuffix}</h3>
@@ -1241,13 +1392,41 @@ function renderScenarioSummaries(sid, results, loan) {
         <table class="breakdown">
           <thead><tr><th>Item</th><th class="num">Monthly</th><th class="num">Annual</th></tr></thead>
           <tbody>
-            ${r.rows.map(row => `<tr><td>${escapeHtml(row.label)}</td><td class="num">${fmt(row.monthly)}</td><td class="num">${fmt(row.monthly * 12)}</td></tr>`).join('')}
+            ${coreRowsHtml}
+            ${subTotalHtml}
+            ${otherRowsHtml}
             <tr class="total"><td>Total</td><td class="num">${fmt(r.total)}</td><td class="num">${fmt(r.total * 12)}</td></tr>
           </tbody>
         </table>
+        <div class="amort-chart-wrap" data-amort-sid="${sid}" data-amort-ri="${ri}">
+          <div class="amort-chart-title">
+            Principal vs interest over loan term
+            <div class="amort-legend">
+              <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(56,189,248,0.8)"></div>Principal</div>
+              <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(248,113,113,0.75)"></div>Interest</div>
+            </div>
+          </div>
+          <canvas class="amort-canvas" data-amort-canvas-sid="${sid}" data-amort-canvas-ri="${ri}"></canvas>
+        </div>
       </div>
     `;
   }).join('');
+
+  // Draw charts after DOM is updated
+  if (s) {
+    results.forEach((r, ri) => {
+      const canvas = container.querySelector(`[data-amort-canvas-sid="${sid}"][data-amort-canvas-ri="${ri}"]`);
+      const m = s.mortgages && s.mortgages[ri];
+      if (canvas && m) {
+        const price = numVal(s.price);
+        const down = numVal(s.downAmt);
+        const loanAmt = Math.max(0, price - down);
+        const rate = numVal(m.rate);
+        const years = numVal(m.term);
+        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years));
+      }
+    });
+  }
 }
 
 function computeCa() {

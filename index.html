@@ -1286,10 +1286,12 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
       balance = Math.max(0, balance - prinPart);
     }
     cumulPrincipal += yearPrincipal;
+    const cumulInterest = (yearlyData.length > 0 ? yearlyData[yearlyData.length - 1].cumulInterest : 0) + yearInterest;
     yearlyData.push({
       interest: yearInterest,
       principal: yearPrincipal,
       cumulPrincipal,
+      cumulInterest,
       totalEquity: down + cumulPrincipal,
     });
   }
@@ -1398,11 +1400,22 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
     });
     ctx.stroke();
 
+    // Cumulative interest line
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(192,132,252,0.85)';
+    ctx.lineWidth = 2;
+    yearlyData.forEach((d, i) => {
+      const cx = pad.left + i * (barW + barGap) + barW / 2;
+      const cy = lineY(d.cumulInterest);
+      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+
     // Dots on hovered year
     if (hoveredIdx >= 0 && hoveredIdx < yearlyData.length) {
       const d = yearlyData[hoveredIdx];
       const cx = pad.left + hoveredIdx * (barW + barGap) + barW / 2;
-      [[lineY(d.cumulPrincipal), 'rgba(74,222,128,1)'], [lineY(d.totalEquity), 'rgba(251,191,36,1)']].forEach(([cy, color]) => {
+      [[lineY(d.cumulPrincipal), 'rgba(74,222,128,1)'], [lineY(d.totalEquity), 'rgba(251,191,36,1)'], [lineY(d.cumulInterest), 'rgba(192,132,252,1)']].forEach(([cy, color]) => {
         ctx.beginPath();
         ctx.arc(cx, cy, 4, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -1434,7 +1447,8 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
         `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
         `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>` +
         `<div style="color:rgba(74,222,128,0.95)">Cumul. principal $${Math.round(d.cumulPrincipal).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(251,191,36,0.95)">Total equity &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>`;
+        `<div style="color:rgba(251,191,36,0.95)">Total equity &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(192,132,252,0.95)">Cumul. interest &nbsp;$${Math.round(d.cumulInterest).toLocaleString('en-US')}</div>`;
       const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
       let tx = e.clientX + 14;
       let ty = e.clientY - th / 2;
@@ -1526,6 +1540,7 @@ function renderScenarioSummaries(sid, results, loan) {
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(248,113,113,0.75)"></div>Interest</div>
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(74,222,128,0.85);border-radius:50%"></div>Cumul. principal</div>
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(251,191,36,0.85);border-radius:50%"></div>Total equity</div>
+              <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(192,132,252,0.85);border-radius:50%"></div>Cumul. interest</div>
             </div>
           </div>
           <canvas class="amort-canvas" data-amort-canvas-sid="${sid}" data-amort-canvas-ri="${ri}"></canvas>

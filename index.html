@@ -1294,6 +1294,14 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
   canvas.style.height = H + 'px';
   canvas.style.cursor = 'crosshair';
 
+  let tooltip = document.getElementById('amort-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'amort-tooltip';
+    tooltip.style.cssText = 'position:fixed;pointer-events:none;display:none;background:rgba(15,23,42,0.93);border:1px solid rgba(148,163,184,0.25);border-radius:6px;padding:8px 10px;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.7;z-index:9999;white-space:nowrap;';
+    document.body.appendChild(tooltip);
+  }
+
   const pad = { top: 10, right: 8, bottom: 24, left: 52 };
   const chartW = W - pad.left - pad.right;
   const chartH = H - pad.top - pad.bottom;
@@ -1346,39 +1354,6 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
       }
     });
 
-    if (hoveredIdx >= 0 && hoveredIdx < yearlyData.length) {
-      const d = yearlyData[hoveredIdx];
-      const x = pad.left + hoveredIdx * (barW + barGap);
-      const intH = (d.interest / maxVal) * chartH;
-      const prinH = (d.principal / maxVal) * chartH;
-      const barTopY = pad.top + chartH - intH - prinH;
-
-      const lines = [
-        { text: `Year ${hoveredIdx + 1}`, color: 'rgba(226,232,240,0.95)', bold: true },
-        { text: `Principal  $${Math.round(d.principal).toLocaleString('en-US')}`, color: 'rgba(56,189,248,0.95)', bold: false },
-        { text: `Interest   $${Math.round(d.interest).toLocaleString('en-US')}`, color: 'rgba(248,113,113,0.95)', bold: false },
-      ];
-      const tPad = 8, lineH = 16, tW = 178, tH = lines.length * lineH + tPad * 2;
-      let tx = x + barW / 2 - tW / 2;
-      let ty = barTopY - tH - 6;
-      if (tx < pad.left) tx = pad.left;
-      if (tx + tW > W - pad.right) tx = W - pad.right - tW;
-      if (ty < 2) ty = barTopY + intH + prinH + 6;
-
-      ctx.fillStyle = 'rgba(15,23,42,0.93)';
-      ctx.beginPath(); ctx.roundRect(tx, ty, tW, tH, 6); ctx.fill();
-      ctx.strokeStyle = 'rgba(148,163,184,0.25)';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.roundRect(tx, ty, tW, tH, 6); ctx.stroke();
-
-      lines.forEach((ln, li) => {
-        ctx.fillStyle = ln.color;
-        ctx.font = `${ln.bold ? 'bold ' : ''}11px -apple-system, sans-serif`;
-        ctx.textAlign = 'left';
-        ctx.fillText(ln.text, tx + tPad, ty + tPad + (li + 1) * lineH - 3);
-      });
-    }
-
     ctx.restore();
   }
 
@@ -1396,8 +1371,26 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
       if (mx >= x && mx <= x + barW) { hov = i; break; }
     }
     draw(hov);
+    if (hov >= 0) {
+      const d = yearlyData[hov];
+      tooltip.innerHTML =
+        `<div style="color:rgba(226,232,240,0.95);font-weight:700;margin-bottom:2px">Year ${hov + 1}</div>` +
+        `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>`;
+      const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+      let tx = e.clientX + 14;
+      let ty = e.clientY - th / 2;
+      if (tx + tw > window.innerWidth - 8) tx = e.clientX - tw - 14;
+      if (ty < 8) ty = 8;
+      if (ty + th > window.innerHeight - 8) ty = window.innerHeight - th - 8;
+      tooltip.style.left = tx + 'px';
+      tooltip.style.top = ty + 'px';
+      tooltip.style.display = 'block';
+    } else {
+      tooltip.style.display = 'none';
+    }
   };
-  canvas._amortLeave = () => draw(-1);
+  canvas._amortLeave = () => { draw(-1); tooltip.style.display = 'none'; };
   canvas.addEventListener('mousemove', canvas._amortMove);
   canvas.addEventListener('mouseleave', canvas._amortLeave);
 }

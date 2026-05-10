@@ -1621,13 +1621,16 @@ function renderScenarioSummaries(sid, results, loan) {
     const subTotalHtml = `<tr class="sub-total"><td>↳ Mortgage, insurance &amp; taxes</td><td class="num">${fmt(coreTotal)}</td><td class="num">${fmt(coreTotal * 12)}</td></tr>`;
 
     const coreNonMortgage = coreRows.slice(1).reduce((acc, row) => acc + row.monthly, 0);
-    const ALT_TERMS = [20, 25, 30, 35, 40];
-    const altTermsHtml = (r.rate > 0 && loan > 0) ? ALT_TERMS
-      .filter(t => t !== r.term)
-      .map(t => {
-        const altPI = monthlyMortgage(loan, r.rate, t);
+    const price = numVal(s.price);
+    const chosenDownPct = Math.round(numVal(s.downPct));
+    const ALT_DOWN_PCTS = [20, 25, 30, 35, 40];
+    const altTermsHtml = (r.rate > 0 && r.term > 0 && price > 0) ? ALT_DOWN_PCTS
+      .filter(pct => pct !== chosenDownPct)
+      .map(pct => {
+        const altLoan = price * (1 - pct / 100);
+        const altPI = monthlyMortgage(altLoan, r.rate, r.term);
         const altMIT = altPI + coreNonMortgage;
-        return `<tr><td style="color:var(--muted);font-size:12px;padding-left:14px">↳ MIT @ ${t}yr term</td><td class="num" style="color:var(--muted);font-size:12px">${fmt(altMIT)}</td><td class="num" style="color:var(--muted);font-size:12px">${fmt(altMIT * 12)}</td></tr>`;
+        return `<tr><td style="color:var(--muted);font-size:12px;padding-left:14px">↳ MIT @ ${pct}% down</td><td class="num" style="color:var(--muted);font-size:12px">${fmt(altMIT)}</td><td class="num" style="color:var(--muted);font-size:12px">${fmt(altMIT * 12)}</td></tr>`;
       }).join('') : '';
 
     const otherRowsHtml = otherRows.map(row =>

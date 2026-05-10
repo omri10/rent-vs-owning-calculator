@@ -1445,10 +1445,10 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
       tooltip.innerHTML =
         `<div style="color:rgba(226,232,240,0.95);font-weight:700;margin-bottom:2px">Year ${hov + 1}</div>` +
         `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>` +
         `<div style="color:rgba(74,222,128,0.95)">Cumul. principal $${Math.round(d.cumulPrincipal).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(251,191,36,0.95)">Total equity &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(192,132,252,0.95)">Cumul. interest &nbsp;$${Math.round(d.cumulInterest).toLocaleString('en-US')}</div>`;
+        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(192,132,252,0.95)">Cumul. interest &nbsp;$${Math.round(d.cumulInterest).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(251,191,36,0.95)">Total equity &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>`;
       const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
       let tx = e.clientX + 14;
       let ty = e.clientY - th / 2;

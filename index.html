@@ -1265,7 +1265,7 @@ function computeScenario(s) {
   return results;
 }
 
-function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment) {
+function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment, monthlyMIT) {
   if (!canvas || principal <= 0 || years <= 0 || annualRatePct < 0) return;
   const down = downPayment || 0;
 
@@ -1444,6 +1444,7 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
       const d = yearlyData[hov];
       tooltip.innerHTML =
         `<div style="color:rgba(226,232,240,0.95);font-weight:700;margin-bottom:2px">Year ${hov + 1}</div>` +
+        (monthlyMIT ? `<div style="color:rgba(226,232,240,0.7)">Monthly (MIT) &nbsp;&nbsp;&nbsp;$${Math.round(monthlyMIT).toLocaleString('en-US')}</div>` : '') +
         `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
         `<div style="color:rgba(74,222,128,0.95)">Cumul. principal $${Math.round(d.cumulPrincipal).toLocaleString('en-US')}</div>` +
         `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>` +
@@ -1560,7 +1561,8 @@ function renderScenarioSummaries(sid, results, loan) {
         const loanAmt = Math.max(0, price - down);
         const rate = numVal(m.rate);
         const years = numVal(m.term);
-        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down));
+        const coreTotal = r.rows.slice(0, 3).reduce((acc, row) => acc + row.monthly, 0);
+        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down, coreTotal));
       }
     });
   }

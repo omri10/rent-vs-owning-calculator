@@ -1265,8 +1265,9 @@ function computeScenario(s) {
   return results;
 }
 
-function drawAmortizationChart(canvas, principal, annualRatePct, years) {
+function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment) {
   if (!canvas || principal <= 0 || years <= 0 || annualRatePct < 0) return;
+  const down = downPayment || 0;
 
   const r = (annualRatePct / 100) / 12;
   const n = years * 12;
@@ -1274,6 +1275,7 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
 
   const yearlyData = [];
   let balance = principal;
+  let cumulPrincipal = 0;
   for (let y = 0; y < years; y++) {
     let yearInterest = 0, yearPrincipal = 0;
     for (let m = 0; m < 12; m++) {
@@ -1283,7 +1285,13 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
       yearPrincipal += prinPart;
       balance = Math.max(0, balance - prinPart);
     }
-    yearlyData.push({ interest: yearInterest, principal: yearPrincipal });
+    cumulPrincipal += yearPrincipal;
+    yearlyData.push({
+      interest: yearInterest,
+      principal: yearPrincipal,
+      cumulPrincipal,
+      totalEquity: down + cumulPrincipal,
+    });
   }
 
   const dpr = window.devicePixelRatio || 1;
@@ -1302,12 +1310,16 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
     document.body.appendChild(tooltip);
   }
 
-  const pad = { top: 10, right: 8, bottom: 24, left: 52 };
+  const pad = { top: 10, right: 52, bottom: 24, left: 52 };
   const chartW = W - pad.left - pad.right;
   const chartH = H - pad.top - pad.bottom;
-  const maxVal = Math.max(...yearlyData.map(d => d.interest + d.principal));
+  const maxBar = Math.max(...yearlyData.map(d => d.interest + d.principal));
+  const maxLine = Math.max(...yearlyData.map(d => d.totalEquity));
   const barGap = Math.max(1, Math.floor(chartW / years * 0.15));
   const barW = (chartW - barGap * (years - 1)) / years;
+
+  function barY(val) { return pad.top + chartH - (val / maxBar) * chartH; }
+  function lineY(val) { return pad.top + chartH - (val / maxLine) * chartH; }
 
   function draw(hoveredIdx) {
     const ctx = canvas.getContext('2d');
@@ -1315,7 +1327,7 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    // Grid lines
+    // Grid lines + left axis (bar scale)
     ctx.strokeStyle = 'rgba(148,163,184,0.12)';
     ctx.lineWidth = 1;
     const gridLines = 4;
@@ -1326,14 +1338,24 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
         ctx.fillStyle = 'rgba(148,163,184,0.5)';
         ctx.font = `10px -apple-system, sans-serif`;
         ctx.textAlign = 'right';
-        ctx.fillText('$' + Math.round(maxVal * i / gridLines / 1000) + 'k', pad.left - 4, y + 3);
+        ctx.fillText('$' + Math.round(maxBar * i / gridLines / 1000) + 'k', pad.left - 4, y + 3);
       }
     }
 
+    // Right axis (line scale)
+    for (let i = 1; i <= gridLines; i++) {
+      const y = pad.top + chartH - (i / gridLines) * chartH;
+      ctx.fillStyle = 'rgba(148,163,184,0.35)';
+      ctx.font = `10px -apple-system, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText('$' + Math.round(maxLine * i / gridLines / 1000) + 'k', pad.left + chartW + 4, y + 3);
+    }
+
+    // Bars
     yearlyData.forEach((d, i) => {
       const x = pad.left + i * (barW + barGap);
-      const intH = (d.interest / maxVal) * chartH;
-      const prinH = (d.principal / maxVal) * chartH;
+      const intH = (d.interest / maxBar) * chartH;
+      const prinH = (d.principal / maxBar) * chartH;
       const isHov = i === hoveredIdx;
 
       ctx.fillStyle = isHov ? 'rgba(248,113,113,1)' : 'rgba(248,113,113,0.75)';
@@ -1353,6 +1375,40 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
         ctx.fillText('yr ' + (i + 1), x + barW / 2, H - 6);
       }
     });
+
+    // Cumulative principal line
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(74,222,128,0.85)';
+    ctx.lineWidth = 2;
+    yearlyData.forEach((d, i) => {
+      const cx = pad.left + i * (barW + barGap) + barW / 2;
+      const cy = lineY(d.cumulPrincipal);
+      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+
+    // Total equity line
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(251,191,36,0.85)';
+    ctx.lineWidth = 2;
+    yearlyData.forEach((d, i) => {
+      const cx = pad.left + i * (barW + barGap) + barW / 2;
+      const cy = lineY(d.totalEquity);
+      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+
+    // Dots on hovered year
+    if (hoveredIdx >= 0 && hoveredIdx < yearlyData.length) {
+      const d = yearlyData[hoveredIdx];
+      const cx = pad.left + hoveredIdx * (barW + barGap) + barW / 2;
+      [[lineY(d.cumulPrincipal), 'rgba(74,222,128,1)'], [lineY(d.totalEquity), 'rgba(251,191,36,1)']].forEach(([cy, color]) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      });
+    }
 
     ctx.restore();
   }
@@ -1375,8 +1431,10 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years) {
       const d = yearlyData[hov];
       tooltip.innerHTML =
         `<div style="color:rgba(226,232,240,0.95);font-weight:700;margin-bottom:2px">Year ${hov + 1}</div>` +
-        `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>`;
+        `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(74,222,128,0.95)">Cumul. principal $${Math.round(d.cumulPrincipal).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(251,191,36,0.95)">Total equity &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>`;
       const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
       let tx = e.clientX + 14;
       let ty = e.clientY - th / 2;
@@ -1466,6 +1524,8 @@ function renderScenarioSummaries(sid, results, loan) {
             <div class="amort-legend">
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(56,189,248,0.8)"></div>Principal</div>
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(248,113,113,0.75)"></div>Interest</div>
+              <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(74,222,128,0.85);border-radius:50%"></div>Cumul. principal</div>
+              <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(251,191,36,0.85);border-radius:50%"></div>Total equity</div>
             </div>
           </div>
           <canvas class="amort-canvas" data-amort-canvas-sid="${sid}" data-amort-canvas-ri="${ri}"></canvas>
@@ -1485,7 +1545,7 @@ function renderScenarioSummaries(sid, results, loan) {
         const loanAmt = Math.max(0, price - down);
         const rate = numVal(m.rate);
         const years = numVal(m.term);
-        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years));
+        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down));
       }
     });
   }

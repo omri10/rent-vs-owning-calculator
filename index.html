@@ -827,6 +827,37 @@
     border-radius: 6px;
   }
 
+  /* Down-payment tabs on amort chart */
+  .amort-dp-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .amort-dp-tab {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 500;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .amort-dp-tab:hover { border-color: var(--fl); color: var(--fl); }
+  .amort-dp-tab.active { border-color: var(--fl); color: var(--fl); background: rgba(56,189,248,0.08); font-weight: 600; }
+  .amort-dp-tab.is-selected { border-style: solid; }
+  .amort-dp-note {
+    font-size: 11px;
+    color: var(--warn);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
   /* Breakdown sub-total */
   table.breakdown tr.sub-total td {
     font-size: 12px;
@@ -1665,7 +1696,10 @@ function renderScenarioSummaries(sid, results, loan) {
             <tr class="total"><td>Total</td><td class="num">${fmt(r.total)}</td><td class="num">${fmt(r.total * 12)}</td></tr>
           </tbody>
         </table>
-        <div class="amort-chart-wrap" data-amort-sid="${sid}" data-amort-ri="${ri}">
+        <div class="amort-chart-wrap"
+             data-amort-sid="${sid}" data-amort-ri="${ri}"
+             data-price="${price}" data-rate="${r.rate}" data-term="${r.term}"
+             data-core-non-mortgage="${coreNonMortgage}" data-chosen-pct="${chosenDownPct}">
           <div class="amort-chart-title">
             Principal vs interest over loan term
             <div class="amort-legend">
@@ -1675,6 +1709,15 @@ function renderScenarioSummaries(sid, results, loan) {
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(251,191,36,0.85);border-radius:50%"></div>Total equity</div>
               <div class="amort-legend-item"><div class="amort-legend-dot" style="background:rgba(192,132,252,0.85);border-radius:50%"></div>Cumul. interest</div>
             </div>
+          </div>
+          <div class="amort-dp-tabs">
+            ${[20,25,30,35,40].map(pct => `
+              <button class="amort-dp-tab${pct === chosenDownPct ? ' active is-selected' : ''}" data-dp-pct="${pct}">
+                ${pct}%${pct === chosenDownPct ? ' ★' : ''}
+              </button>`).join('')}
+          </div>
+          <div class="amort-dp-note" style="display:none">
+            ⚠ Alternative scenario — your selected down payment is ${chosenDownPct >= 0 ? chosenDownPct + '%' : 'custom'}
           </div>
           <canvas class="amort-canvas" data-amort-canvas-sid="${sid}" data-amort-canvas-ri="${ri}"></canvas>
         </div>
@@ -2211,6 +2254,36 @@ document.getElementById('buy-scenarios-container').addEventListener('click', e =
     renderScenarioExtras(sid);
     refresh();
   }
+});
+
+// Amortization down-payment tab clicks
+document.getElementById('buy-scenarios-container').addEventListener('click', e => {
+  const tab = e.target.closest('.amort-dp-tab');
+  if (!tab) return;
+  const wrap = tab.closest('.amort-chart-wrap');
+  if (!wrap) return;
+
+  const pct = +tab.dataset.dpPct;
+  const price = +wrap.dataset.price;
+  const rate = +wrap.dataset.rate;
+  const term = +wrap.dataset.term;
+  const coreNonMortgage = +wrap.dataset.coreNonMortgage;
+  const chosenPct = +wrap.dataset.chosenPct;
+
+  // Update active tab
+  wrap.querySelectorAll('.amort-dp-tab').forEach(b => b.classList.remove('active'));
+  tab.classList.add('active');
+
+  // Show/hide alternative scenario note
+  const note = wrap.querySelector('.amort-dp-note');
+  if (note) note.style.display = pct === chosenPct ? 'none' : '';
+
+  // Recompute and redraw
+  const altDown = price * pct / 100;
+  const altLoan = price - altDown;
+  const altMIT = monthlyMortgage(altLoan, rate, term) + coreNonMortgage;
+  const canvas = wrap.querySelector('.amort-canvas');
+  if (canvas) drawAmortizationChart(canvas, altLoan, rate, term, altDown, altMIT);
 });
 
 document.getElementById('addScenarioBtn').addEventListener('click', () => {

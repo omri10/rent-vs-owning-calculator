@@ -662,6 +662,118 @@
   }
   .add-income-btn:hover { border-color: var(--good); color: var(--good); }
 
+  /* Income lock */
+  .income-lock-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 0 8px;
+  }
+  .income-lock-icon {
+    font-size: 28px;
+    line-height: 1;
+  }
+  .income-lock-label {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .income-lock-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .income-lock-row input {
+    width: 160px;
+    letter-spacing: 0.1em;
+  }
+  .income-lock-btn {
+    background: var(--fl-strong);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  .income-lock-btn:hover { background: var(--fl); }
+  .income-lock-error {
+    font-size: 12px;
+    color: var(--danger);
+    min-height: 16px;
+  }
+  .income-person-block {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .income-person-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+  .income-person-name {
+    flex: 1;
+  }
+  .income-person-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .income-source-row {
+    display: grid;
+    grid-template-columns: 1fr 160px 32px;
+    gap: 8px;
+    align-items: center;
+  }
+  .income-source-row .remove-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--danger);
+    border-radius: 8px;
+    width: 32px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .income-source-row .remove-btn:hover { background: rgba(248,113,113,0.1); }
+  .add-source-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 13px;
+    font-family: inherit;
+    margin-top: 6px;
+  }
+  .add-source-btn:hover { border-color: var(--good); color: var(--good); }
+  .income-lock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    font-family: inherit;
+  }
+  .income-lock-badge:hover { color: var(--text); border-color: var(--text); }
+
   /* Net gain/loss in verdict */
   .verdict-rent-row .net-line,
   .verdict-buy-row .net-line {
@@ -864,13 +976,29 @@
   </div>
 
   <div class="income-card">
-    <h2>Monthly income</h2>
-    <div class="hint">Compare housing costs against take-home income (up to two people).</div>
-    <div class="income-list" id="incomeList"></div>
-    <button class="add-income-btn" id="addIncomeBtn">+ Add second person</button>
-    <div class="income-total-row">
-      <span class="lbl">Total monthly income</span>
-      <span class="num" id="incomeTotal">$0</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h2 style="margin:0">Monthly income</h2>
+      <button class="income-lock-badge" id="incomeLockBadge">🔒 Locked</button>
+    </div>
+    <div class="hint" id="incomeHint">Enter password to view income details.</div>
+
+    <div id="incomeLockOverlay" class="income-lock-overlay">
+      <div class="income-lock-icon">🔒</div>
+      <div class="income-lock-label">Income is password-protected</div>
+      <div class="income-lock-row">
+        <input type="password" id="incomePasswordInput" placeholder="Enter password" />
+        <button class="income-lock-btn" id="incomeUnlockBtn">Unlock</button>
+      </div>
+      <div class="income-lock-error" id="incomeLockError"></div>
+    </div>
+
+    <div id="incomeContent" style="display:none">
+      <div class="income-list" id="incomeList"></div>
+      <button class="add-income-btn" id="addIncomeBtn">+ Add person</button>
+      <div class="income-total-row">
+        <span class="lbl">Total monthly income</span>
+        <span class="num" id="incomeTotal">$0</span>
+      </div>
     </div>
   </div>
 
@@ -905,8 +1033,9 @@ const els = {};
 let buyScenarios = [];
 let nextSid = 0;
 let caExtras = [];
-let incomes = [{ name: '', amount: '' }];
-const MAX_INCOMES = 2;
+let incomes = [{ name: '', sources: [{ label: '', amount: '' }] }];
+const INCOME_PASSWORD = '12345678';
+let incomeUnlocked = false;
 let syncing = {};
 let pantryId = null;
 let cloudSaveTimer = null;
@@ -1612,7 +1741,7 @@ function netHtml(income, cost) {
 
 function updateVerdict(buyResults, caTotal) {
   const vc = els['verdict-container'];
-  const income = totalMonthlyIncome();
+  const income = incomeUnlocked ? totalMonthlyIncome() : 0;
   const incomeTotalEl = document.getElementById('incomeTotal');
   if (incomeTotalEl) incomeTotalEl.textContent = fmt(income);
 
@@ -1685,32 +1814,54 @@ function refresh() {
   saveState();
 }
 
+function setIncomeUnlocked(val) {
+  incomeUnlocked = val;
+  const overlay = document.getElementById('incomeLockOverlay');
+  const content = document.getElementById('incomeContent');
+  const badge = document.getElementById('incomeLockBadge');
+  const hint = document.getElementById('incomeHint');
+  if (overlay) overlay.style.display = val ? 'none' : '';
+  if (content) content.style.display = val ? '' : 'none';
+  if (badge) badge.textContent = val ? '🔓 Lock' : '🔒 Locked';
+  if (hint) hint.textContent = val ? 'Compare housing costs against take-home income.' : 'Enter password to view income details.';
+}
+
 // Income rendering
 function renderIncomes() {
   const container = document.getElementById('incomeList');
   if (!container) return;
   container.innerHTML = '';
-  incomes.forEach((inc, i) => {
-    const row = document.createElement('div');
-    row.className = 'income-row';
-    const placeholder = i === 0 ? 'Person 1 (e.g. Alex)' : 'Person 2 (e.g. Sam)';
-    row.innerHTML = `
-      <input type="text" data-ii="${i}" data-if="name" placeholder="${placeholder}" value="${escapeHtml(inc.name || '')}" />
-      <div class="input-wrap">
-        <span class="prefix">$</span>
-        <input type="number" data-ii="${i}" data-if="amount" class="with-prefix with-suffix" placeholder="0" min="0" step="100" value="${inc.amount ?? ''}" />
-        <span class="suffix">/ mo</span>
+  incomes.forEach((person, pi) => {
+    const block = document.createElement('div');
+    block.className = 'income-person-block';
+    const sources = person.sources || [{ label: '', amount: '' }];
+    block.innerHTML = `
+      <div class="income-person-header">
+        <input type="text" class="income-person-name" data-pi="${pi}" data-pf="name" placeholder="Person ${pi + 1} (e.g. Alex)" value="${escapeHtml(person.name || '')}" />
+        ${incomes.length > 1 ? `<button class="remove-btn" data-pi="${pi}" data-pf="remove" title="Remove person" style="flex-shrink:0">×</button>` : ''}
       </div>
-      ${incomes.length > 1 ? `<button class="remove-btn" data-ii="${i}" data-if="remove" title="Remove">×</button>` : '<div></div>'}
+      <div class="income-person-sources" data-sources-pi="${pi}">
+        ${sources.map((src, si) => `
+          <div class="income-source-row">
+            <input type="text" data-pi="${pi}" data-si="${si}" data-sf="label" placeholder="Source (e.g. Salary)" value="${escapeHtml(src.label || '')}" />
+            <div class="input-wrap">
+              <span class="prefix">$</span>
+              <input type="number" data-pi="${pi}" data-si="${si}" data-sf="amount" class="with-prefix with-suffix" placeholder="0" min="0" step="100" value="${src.amount ?? ''}" />
+              <span class="suffix">/ mo</span>
+            </div>
+            ${sources.length > 1 ? `<button class="remove-btn" data-pi="${pi}" data-si="${si}" data-sf="remove" title="Remove">×</button>` : '<div></div>'}
+          </div>
+        `).join('')}
+      </div>
+      <button class="add-source-btn" data-add-source-pi="${pi}">+ Add income source</button>
     `;
-    container.appendChild(row);
+    container.appendChild(block);
   });
-  const addBtn = document.getElementById('addIncomeBtn');
-  if (addBtn) addBtn.style.display = incomes.length >= MAX_INCOMES ? 'none' : '';
 }
 
 function totalMonthlyIncome() {
-  return incomes.reduce((acc, inc) => acc + (parseFloat(inc.amount) || 0), 0);
+  return incomes.reduce((acc, person) =>
+    acc + (person.sources || []).reduce((s, src) => s + (parseFloat(src.amount) || 0), 0), 0);
 }
 
 // CA extras rendering
@@ -1767,9 +1918,15 @@ function applyState(s, isInit) {
   if (els['ca_rent'] && els['ca_rent'].value === '') els['ca_rent'].value = '5400';
   caExtras = Array.isArray(s.caExtras) ? s.caExtras : [];
   if (Array.isArray(s.incomes) && s.incomes.length > 0) {
-    incomes = s.incomes.slice(0, MAX_INCOMES).map(i => ({ name: i.name || '', amount: i.amount ?? '' }));
+    incomes = s.incomes.map(i => {
+      // migrate old { name, amount } format
+      if (!Array.isArray(i.sources)) {
+        return { name: i.name || '', sources: [{ label: '', amount: i.amount ?? '' }] };
+      }
+      return { name: i.name || '', sources: i.sources };
+    });
   } else {
-    incomes = [{ name: '', amount: '' }];
+    incomes = [{ name: '', sources: [{ label: '', amount: '' }] }];
   }
 
   // Migrate old fl_* format
@@ -1797,6 +1954,7 @@ function applyState(s, isInit) {
   renderBuyScenarios();
   renderCaExtras();
   renderIncomes();
+  setIncomeUnlocked(false);
 
   const buyResults = buyScenarios.map(s => computeScenario(s));
   const caTotal = computeCa();
@@ -2093,27 +2251,56 @@ document.querySelector('[data-add="ca"]').addEventListener('click', () => {
 // Income handlers
 document.getElementById('incomeList').addEventListener('input', e => {
   const t = e.target;
-  const i = t.dataset.ii !== undefined ? +t.dataset.ii : null;
-  const f = t.dataset.if;
-  if (i !== null && f && incomes[i]) {
-    incomes[i][f] = t.value;
+  const pi = t.dataset.pi !== undefined ? +t.dataset.pi : null;
+  const si = t.dataset.si !== undefined ? +t.dataset.si : null;
+  if (pi === null || !incomes[pi]) return;
+  if (t.dataset.pf === 'name') { incomes[pi].name = t.value; refresh(); return; }
+  if (si !== null && t.dataset.sf && incomes[pi].sources[si]) {
+    incomes[pi].sources[si][t.dataset.sf] = t.value;
     refresh();
   }
 });
 document.getElementById('incomeList').addEventListener('click', e => {
-  const t = e.target.closest('[data-if="remove"]');
-  if (!t) return;
-  const i = +t.dataset.ii;
-  incomes.splice(i, 1);
-  if (incomes.length === 0) incomes = [{ name: '', amount: '' }];
-  renderIncomes();
-  refresh();
+  const removePersonBtn = e.target.closest('[data-pf="remove"]');
+  if (removePersonBtn) {
+    incomes.splice(+removePersonBtn.dataset.pi, 1);
+    if (incomes.length === 0) incomes = [{ name: '', sources: [{ label: '', amount: '' }] }];
+    renderIncomes(); refresh(); return;
+  }
+  const removeSourceBtn = e.target.closest('[data-sf="remove"]');
+  if (removeSourceBtn) {
+    const pi = +removeSourceBtn.dataset.pi, si = +removeSourceBtn.dataset.si;
+    if (incomes[pi]) { incomes[pi].sources.splice(si, 1); if (!incomes[pi].sources.length) incomes[pi].sources = [{ label: '', amount: '' }]; }
+    renderIncomes(); refresh(); return;
+  }
+  const addSourceBtn = e.target.closest('[data-add-source-pi]');
+  if (addSourceBtn) {
+    const pi = +addSourceBtn.dataset.addSourcePi;
+    if (incomes[pi]) { incomes[pi].sources.push({ label: '', amount: '' }); renderIncomes(); refresh(); }
+  }
 });
 document.getElementById('addIncomeBtn').addEventListener('click', () => {
-  if (incomes.length >= MAX_INCOMES) return;
-  incomes.push({ name: '', amount: '' });
-  renderIncomes();
-  refresh();
+  incomes.push({ name: '', sources: [{ label: '', amount: '' }] });
+  renderIncomes(); refresh();
+});
+
+// Income lock handlers
+document.getElementById('incomeUnlockBtn').addEventListener('click', () => {
+  const val = document.getElementById('incomePasswordInput').value;
+  if (val === INCOME_PASSWORD) {
+    setIncomeUnlocked(true);
+    document.getElementById('incomeLockError').textContent = '';
+    document.getElementById('incomePasswordInput').value = '';
+  } else {
+    document.getElementById('incomeLockError').textContent = 'Incorrect password.';
+  }
+});
+document.getElementById('incomePasswordInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('incomeUnlockBtn').click();
+});
+document.getElementById('incomeLockBadge').addEventListener('click', () => {
+  if (incomeUnlocked) { setIncomeUnlocked(false); refresh(); }
+  else document.getElementById('incomePasswordInput').focus();
 });
 
 els['resetBtn'].addEventListener('click', () => {
@@ -2122,9 +2309,10 @@ els['resetBtn'].addEventListener('click', () => {
   nextSid = 0;
   buyScenarios = [newScenario()];
   caExtras = [];
-  incomes = [{ name: '', amount: '' }];
+  incomes = [{ name: '', sources: [{ label: '', amount: '' }] }];
   caFields.forEach(k => { if (els[k]) els[k].value = ''; });
   if (els['ca_rent']) els['ca_rent'].value = '5400';
+  setIncomeUnlocked(false);
   renderBuyScenarios();
   renderCaExtras();
   renderIncomes();

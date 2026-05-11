@@ -2547,95 +2547,123 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
   const ins = fixedMonthly ? fixedMonthly.insurance : 0;
   const DP_PCTS = [20, 25, 30, 35, 40];
 
-  // Build data: mortgages × down payments
-  const combos = [];
-  s.mortgages.forEach(m => {
-    const rate = numVal(m.rate);
-    const years = numVal(m.term) || 30;
-    const io = !!m.interestOnly;
-    DP_PCTS.forEach(pct => {
-      const down = price * pct / 100;
-      const loan = price - down;
-      const data = computeYearlyAmort(loan, rate, years, io);
-      const d = data[Math.min(yearIdx, data.length - 1)];
-      const monthly = monthlyMortgage(loan, rate, years, io);
-      combos.push({
-        mortgageLabel: m.type || 'Mortgage',
-        pct,
-        isSelected: pct === chosenPct,
-        isActive: pct === activePct,
-        moP: d ? Math.round(d.principal / 12) : 0,
-        moI: d ? Math.round(d.interest / 12) : 0,
-        moTax: Math.round(tax),
-        moIns: Math.round(ins),
-        moTotal: Math.round(monthly + tax + ins),
-        cumulP: d ? Math.round(d.cumulPrincipal) : 0,
-        cumulI: d ? Math.round(d.cumulInterest) : 0,
-        equity: Math.round(down + (d ? d.cumulPrincipal : 0)),
+  // Local rate overrides — start from each mortgage's actual rate
+  const localRates = s.mortgages.map(m => numVal(m.rate));
+
+  function buildAndRender() {
+    const combos = [];
+    s.mortgages.forEach((m, mi) => {
+      const rate = localRates[mi];
+      const years = numVal(m.term) || 30;
+      const io = !!m.interestOnly;
+      DP_PCTS.forEach(pct => {
+        const down = price * pct / 100;
+        const loan = price - down;
+        const data = computeYearlyAmort(loan, rate, years, io);
+        const d = data[Math.min(yearIdx, data.length - 1)];
+        const monthly = monthlyMortgage(loan, rate, years, io);
+        combos.push({
+          mi, pct,
+          isSelected: pct === chosenPct,
+          isActive: pct === activePct,
+          moP: d ? Math.round(d.principal / 12) : 0,
+          moI: d ? Math.round(d.interest / 12) : 0,
+          moTax: Math.round(tax),
+          moIns: Math.round(ins),
+          moTotal: Math.round(monthly + tax + ins),
+          cumulP: d ? Math.round(d.cumulPrincipal) : 0,
+          cumulI: d ? Math.round(d.cumulInterest) : 0,
+          equity: Math.round(down + (d ? d.cumulPrincipal : 0)),
+        });
       });
     });
-  });
 
-  // Group by mortgage for colspan headers
-  const mortgageCount = s.mortgages.length;
-  const totalCols = mortgageCount * DP_PCTS.length;
+    const totalCols = s.mortgages.length * DP_PCTS.length;
 
-  const headerRow1 = s.mortgages.map(m =>
-    `<th colspan="${DP_PCTS.length}" style="text-align:center;border-bottom:1px solid var(--fl)">${escapeHtml(m.type || 'Mortgage')}</th>`
-  ).join('');
-
-  const headerRow2 = combos.map(c => {
-    const sel = c.isSelected ? ' ★' : '';
-    const style = c.isSelected
-      ? 'background:rgba(56,189,248,0.12);color:var(--fl);font-weight:700'
-      : c.isActive ? 'color:var(--fl)' : '';
-    return `<th style="${style}">${c.pct}%${sel}</th>`;
-  }).join('');
-
-  function row(label, key, color) {
-    const tds = combos.map(c => {
-      const bg = c.isSelected ? 'background:rgba(56,189,248,0.06);' : '';
-      return `<td style="${bg}${color ? 'color:' + color : ''}">${fmt(c[key])}</td>`;
+    const headerRow1 = s.mortgages.map((m, mi) => {
+      const actualRate = numVal(m.rate);
+      const isModified = Math.abs(localRates[mi] - actualRate) > 0.001;
+      return `<th colspan="${DP_PCTS.length}" style="text-align:center;border-bottom:1px solid var(--fl)">
+        ${escapeHtml(m.type || 'Mortgage')}
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:4px">
+          <input type="number" class="cmp-rate-input" data-cmp-mi="${mi}"
+            value="${localRates[mi]}" min="0" max="30" step="0.01"
+            style="width:70px;padding:4px 6px;font-size:12px;text-align:center;background:var(--panel-2);border:1px solid ${isModified ? 'var(--warn)' : 'var(--border)'};color:${isModified ? 'var(--warn)' : 'var(--text)'};border-radius:6px;font-family:inherit" />
+          <span style="font-size:11px;color:var(--muted)">%</span>
+          ${isModified ? `<button class="cmp-rate-reset" data-cmp-mi="${mi}" data-actual="${actualRate}" title="Reset to ${actualRate}%" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px">↺</button>` : ''}
+        </div>
+        ${isModified ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">actual: ${actualRate}%</div>` : ''}
+      </th>`;
     }).join('');
-    return `<tr><td>${label}</td>${tds}</tr>`;
-  }
 
-  function totalRow(label) {
-    const tds = combos.map(c => {
-      const bg = c.isSelected ? 'background:rgba(56,189,248,0.06);' : '';
-      return `<td style="${bg}font-weight:700">${fmt(c.moTotal)}</td>`;
+    const headerRow2 = combos.map(c => {
+      const sel = c.isSelected ? ' ★' : '';
+      const style = c.isSelected
+        ? 'background:rgba(56,189,248,0.12);color:var(--fl);font-weight:700'
+        : c.isActive ? 'color:var(--fl)' : '';
+      return `<th style="${style}">${c.pct}%${sel}</th>`;
     }).join('');
-    return `<tr class="cmp-total"><td>${label}</td>${tds}</tr>`;
-  }
 
-  const html = `
-    <div class="year-cmp-header">
-      <div class="year-cmp-title">Year ${yearIdx + 1} — All mortgages &amp; down payments
-        <span style="font-weight:400;font-size:12px;color:var(--muted);margin-left:8px">★ = your selected down payment</span>
+    function row(label, key, color) {
+      return `<tr><td>${label}</td>${combos.map(c => {
+        const bg = c.isSelected ? 'background:rgba(56,189,248,0.06);' : '';
+        return `<td style="${bg}${color ? 'color:' + color : ''}">${fmt(c[key])}</td>`;
+      }).join('')}</tr>`;
+    }
+    function totalRow(label) {
+      return `<tr class="cmp-total"><td>${label}</td>${combos.map(c => {
+        const bg = c.isSelected ? 'background:rgba(56,189,248,0.06);' : '';
+        return `<td style="${bg}font-weight:700">${fmt(c.moTotal)}</td>`;
+      }).join('')}</tr>`;
+    }
+
+    const modal = document.getElementById('yearCmpModal');
+    modal.innerHTML = `
+      <div class="year-cmp-header">
+        <div class="year-cmp-title">Year ${yearIdx + 1} — All mortgages &amp; down payments
+          <span style="font-weight:400;font-size:12px;color:var(--muted);margin-left:8px">★ = your selected down payment</span>
+        </div>
+        <button class="year-cmp-close" id="yearCmpClose">Close ✕</button>
       </div>
-      <button class="year-cmp-close" id="yearCmpClose">Close ✕</button>
-    </div>
-    <div style="overflow-x:auto">
-    <table class="year-cmp-table">
-      <thead>
-        <tr><th></th>${headerRow1}</tr>
-        <tr><th>Item</th>${headerRow2}</tr>
-      </thead>
-      <tbody>
-        <tr class="cmp-section"><td colspan="${totalCols + 1}">Monthly payments</td></tr>
-        ${row('Principal', 'moP', 'rgba(56,189,248,0.95)')}
-        ${row('Interest', 'moI', 'rgba(248,113,113,0.95)')}
-        ${tax ? row('Property tax', 'moTax', 'rgba(148,163,184,0.85)') : ''}
-        ${ins ? row('Insurance', 'moIns', 'rgba(148,163,184,0.85)') : ''}
-        ${totalRow('Total monthly')}
-        <tr class="cmp-section"><td colspan="${totalCols + 1}">Cumulative through year ${yearIdx + 1}</td></tr>
-        ${row('Principal paid', 'cumulP', 'rgba(74,222,128,0.95)')}
-        ${row('Interest paid', 'cumulI', 'rgba(192,132,252,0.95)')}
-        ${row('Total equity', 'equity', 'rgba(251,191,36,0.95)')}
-      </tbody>
-    </table>
-    </div>
-  `;
+      <div style="overflow-x:auto">
+      <table class="year-cmp-table">
+        <thead>
+          <tr><th style="vertical-align:bottom">Rate</th>${headerRow1}</tr>
+          <tr><th>Item</th>${headerRow2}</tr>
+        </thead>
+        <tbody>
+          <tr class="cmp-section"><td colspan="${totalCols + 1}">Monthly payments</td></tr>
+          ${row('Principal', 'moP', 'rgba(56,189,248,0.95)')}
+          ${row('Interest', 'moI', 'rgba(248,113,113,0.95)')}
+          ${tax ? row('Property tax', 'moTax', 'rgba(148,163,184,0.85)') : ''}
+          ${ins ? row('Insurance', 'moIns', 'rgba(148,163,184,0.85)') : ''}
+          ${totalRow('Total monthly')}
+          <tr class="cmp-section"><td colspan="${totalCols + 1}">Cumulative through year ${yearIdx + 1}</td></tr>
+          ${row('Principal paid', 'cumulP', 'rgba(74,222,128,0.95)')}
+          ${row('Interest paid', 'cumulI', 'rgba(192,132,252,0.95)')}
+          ${row('Total equity', 'equity', 'rgba(251,191,36,0.95)')}
+        </tbody>
+      </table>
+      </div>
+    `;
+
+    document.getElementById('yearCmpClose').addEventListener('click', () => { document.getElementById('yearCmpBackdrop').style.display = 'none'; });
+
+    modal.querySelectorAll('.cmp-rate-input').forEach(input => {
+      input.addEventListener('input', e => {
+        const mi = +e.target.dataset.cmpMi;
+        const v = parseFloat(e.target.value);
+        if (isFinite(v) && v >= 0) { localRates[mi] = v; buildAndRender(); }
+      });
+    });
+    modal.querySelectorAll('.cmp-rate-reset').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const mi = +e.target.dataset.cmpMi;
+        localRates[mi] = parseFloat(e.target.dataset.actual);
+        buildAndRender();
+      });
+    });
+  }
 
   let backdrop = document.getElementById('yearCmpBackdrop');
   if (!backdrop) {
@@ -2647,9 +2675,8 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
     backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.style.display = 'none'; });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && backdrop.style.display !== 'none') backdrop.style.display = 'none'; });
   }
-  document.getElementById('yearCmpModal').innerHTML = html;
   backdrop.style.display = 'flex';
-  document.getElementById('yearCmpClose').addEventListener('click', () => { backdrop.style.display = 'none'; });
+  buildAndRender();
 }
 
 // Amortization down-payment tab clicks

@@ -842,6 +842,101 @@
     border-radius: 6px;
   }
 
+  /* Year comparison modal */
+  .year-cmp-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .year-cmp-modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .year-cmp-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    gap: 12px;
+  }
+  .year-cmp-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .year-cmp-close {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .year-cmp-close:hover { color: var(--text); border-color: var(--text); }
+  .year-cmp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .year-cmp-table th {
+    text-align: right;
+    padding: 8px 10px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fl);
+    border-bottom: 2px solid var(--fl);
+    white-space: nowrap;
+  }
+  .year-cmp-table th:first-child {
+    text-align: left;
+    color: var(--muted);
+    border-bottom-color: var(--border);
+  }
+  .year-cmp-table td {
+    text-align: right;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .year-cmp-table td:first-child {
+    text-align: left;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .year-cmp-table tr.cmp-section td,
+  .year-cmp-table tr.cmp-section th {
+    background: var(--panel-2);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    padding: 5px 10px;
+    border-bottom: none;
+  }
+  .year-cmp-table tr.cmp-total td {
+    font-weight: 700;
+    border-top: 2px solid var(--border);
+    border-bottom: none;
+  }
+  .year-cmp-note {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 14px;
+  }
+
   /* Down-payment tabs on amort chart */
   .amort-dp-tabs {
     display: flex;
@@ -1689,6 +1784,28 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
   canvas._amortLeave = () => { draw(-1); tooltip.style.display = 'none'; };
   canvas.addEventListener('mousemove', canvas._amortMove);
   canvas.addEventListener('mouseleave', canvas._amortLeave);
+
+  // Store context for click handler
+  canvas._amortYearlyData = yearlyData;
+  canvas._amortFixed = fixedMonthly;
+  canvas._amortInterestOnly = interestOnly;
+
+  if (canvas._amortClick) canvas.removeEventListener('click', canvas._amortClick);
+  canvas._amortClick = e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    for (let i = 0; i < yearlyData.length; i++) {
+      const x = pad.left + i * (barW + barGap);
+      if (mx >= x && mx <= x + barW) {
+        const wrap = canvas.closest('.amort-chart-wrap');
+        const sid = wrap ? +wrap.dataset.amortSid : null;
+        const activePct = wrap ? +(wrap.dataset.activePct || wrap.dataset.chosenPct) : null;
+        showMortgageYearComparison(sid, i, activePct, fixedMonthly);
+        break;
+      }
+    }
+  };
+  canvas.addEventListener('click', canvas._amortClick);
 }
 
 function renderScenarioSummaries(sid, results, loan) {
@@ -2387,6 +2504,105 @@ document.getElementById('buy-scenarios-container').addEventListener('drop', e =>
   refresh();
 });
 
+function computeYearlyAmort(loanAmt, rate, years, interestOnly) {
+  const r = (rate / 100) / 12;
+  const n = years * 12;
+  const payment = interestOnly
+    ? loanAmt * r
+    : (r === 0 ? loanAmt / n : loanAmt * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1));
+  const data = [];
+  let balance = loanAmt, cumulP = 0, cumulI = 0;
+  for (let y = 0; y < years; y++) {
+    let yi = 0, yp = 0;
+    for (let m = 0; m < 12; m++) {
+      const ip = balance * r;
+      const pp = interestOnly ? 0 : Math.min(payment - ip, balance);
+      yi += ip; yp += pp;
+      balance = Math.max(0, balance - pp);
+    }
+    cumulP += yp; cumulI += yi;
+    data.push({ interest: yi, principal: yp, cumulPrincipal: cumulP, cumulInterest: cumulI });
+  }
+  return data;
+}
+
+function showMortgageYearComparison(sid, yearIdx, downPct, fixedMonthly) {
+  const s = buyScenarios.find(x => x.id === sid);
+  if (!s || !s.mortgages) return;
+  const price = numVal(s.price);
+  const down = price * (downPct / 100);
+  const loan = price - down;
+  const tax = fixedMonthly ? fixedMonthly.tax : 0;
+  const ins = fixedMonthly ? fixedMonthly.insurance : 0;
+
+  const cols = s.mortgages.map(m => {
+    const rate = numVal(m.rate);
+    const years = numVal(m.term) || 30;
+    const io = !!m.interestOnly;
+    const data = computeYearlyAmort(loan, rate, years, io);
+    const d = data[Math.min(yearIdx, data.length - 1)];
+    const moP = d ? Math.round(d.principal / 12) : 0;
+    const moI = d ? Math.round(d.interest / 12) : 0;
+    const monthly = monthlyMortgage(loan, rate, years, io);
+    return {
+      label: m.type || 'Mortgage',
+      moP, moI, moTax: Math.round(tax), moIns: Math.round(ins),
+      moTotal: Math.round(monthly + tax + ins),
+      cumulP: d ? Math.round(d.cumulPrincipal) : 0,
+      cumulI: d ? Math.round(d.cumulInterest) : 0,
+      equity: Math.round(down + (d ? d.cumulPrincipal : 0)),
+    };
+  });
+
+  const chosenPct = Math.round(numVal(s.downPct));
+  const altNote = downPct !== chosenPct
+    ? `<div class="year-cmp-note">⚠ Showing alternative scenario at ${downPct}% down — your selected down payment is ${chosenPct}%.</div>`
+    : '';
+
+  const thCols = cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('');
+
+  function row(label, key, color) {
+    const tds = cols.map(c => `<td style="${color ? 'color:' + color : ''}">${fmt(c[key])}</td>`).join('');
+    return `<tr><td>${label}</td>${tds}</tr>`;
+  }
+
+  const html = `
+    <div class="year-cmp-header">
+      <div class="year-cmp-title">Year ${yearIdx + 1} — Mortgage comparison <span style="font-weight:400;font-size:13px;color:var(--muted)">(${downPct}% down · $${Math.round(down).toLocaleString('en-US')} · $${Math.round(loan).toLocaleString('en-US')} loan)</span></div>
+      <button class="year-cmp-close" id="yearCmpClose">Close ✕</button>
+    </div>
+    <table class="year-cmp-table">
+      <thead><tr><th>Item</th>${thCols}</tr></thead>
+      <tbody>
+        <tr class="cmp-section"><td colspan="${cols.length + 1}">Monthly payments</td></tr>
+        ${row('Principal', 'moP', 'rgba(56,189,248,0.95)')}
+        ${row('Interest', 'moI', 'rgba(248,113,113,0.95)')}
+        ${tax ? row('Property tax', 'moTax', '') : ''}
+        ${ins ? row('Insurance', 'moIns', '') : ''}
+        <tr class="cmp-total">${[`<td>Total monthly</td>`, ...cols.map(c => `<td>${fmt(c.moTotal)}</td>`)].join('')}</tr>
+        <tr class="cmp-section"><td colspan="${cols.length + 1}">Cumulative through year ${yearIdx + 1}</td></tr>
+        ${row('Principal paid', 'cumulP', 'rgba(74,222,128,0.95)')}
+        ${row('Interest paid', 'cumulI', 'rgba(192,132,252,0.95)')}
+        ${row('Total equity', 'equity', 'rgba(251,191,36,0.95)')}
+      </tbody>
+    </table>
+    ${altNote}
+  `;
+
+  let backdrop = document.getElementById('yearCmpBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'yearCmpBackdrop';
+    backdrop.className = 'year-cmp-backdrop';
+    backdrop.innerHTML = `<div class="year-cmp-modal" id="yearCmpModal"></div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.style.display = 'none'; });
+  }
+  document.getElementById('yearCmpModal').innerHTML = html;
+  backdrop.style.display = 'flex';
+  document.getElementById('yearCmpClose').addEventListener('click', () => { backdrop.style.display = 'none'; });
+}
+
 // Amortization down-payment tab clicks
 document.getElementById('buy-scenarios-container').addEventListener('click', e => {
   const tab = e.target.closest('.amort-dp-tab');
@@ -2404,6 +2620,9 @@ document.getElementById('buy-scenarios-container').addEventListener('click', e =
   // Update active tab
   wrap.querySelectorAll('.amort-dp-tab').forEach(b => b.classList.remove('active'));
   tab.classList.add('active');
+
+  // Track active down pct for click comparison
+  wrap.dataset.activePct = pct;
 
   // Show/hide alternative scenario note
   const note = wrap.querySelector('.amort-dp-note');

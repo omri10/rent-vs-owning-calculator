@@ -2547,25 +2547,30 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
   const ins = fixedMonthly ? fixedMonthly.insurance : 0;
   const DP_PCTS = [20, 25, 30, 35, 40];
 
-  // Local rate overrides — start from each mortgage's actual rate
-  const localRates = s.mortgages.map(m => numVal(m.rate));
+  // Local rate overrides — per column (mi × pct), seeded from each mortgage's actual rate
+  const localRates = {};
+  s.mortgages.forEach((m, mi) => {
+    DP_PCTS.forEach(pct => { localRates[`${mi}_${pct}`] = numVal(m.rate); });
+  });
 
   function buildAndRender() {
     const combos = [];
     s.mortgages.forEach((m, mi) => {
-      const rate = localRates[mi];
       const years = numVal(m.term) || 30;
       const io = !!m.interestOnly;
       DP_PCTS.forEach(pct => {
+        const rate = localRates[`${mi}_${pct}`];
         const down = price * pct / 100;
         const loan = price - down;
         const data = computeYearlyAmort(loan, rate, years, io);
         const d = data[Math.min(yearIdx, data.length - 1)];
         const monthly = monthlyMortgage(loan, rate, years, io);
+        const actualRate = numVal(m.rate);
         combos.push({
-          mi, pct,
+          mi, pct, rate, actualRate,
           isSelected: pct === chosenPct,
           isActive: pct === activePct,
+          isModified: Math.abs(rate - actualRate) > 0.001,
           moP: d ? Math.round(d.principal / 12) : 0,
           moI: d ? Math.round(d.interest / 12) : 0,
           moTax: Math.round(tax),
@@ -2580,28 +2585,24 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
 
     const totalCols = s.mortgages.length * DP_PCTS.length;
 
-    const headerRow1 = s.mortgages.map((m, mi) => {
-      const actualRate = numVal(m.rate);
-      const isModified = Math.abs(localRates[mi] - actualRate) > 0.001;
-      return `<th colspan="${DP_PCTS.length}" style="text-align:center;border-bottom:1px solid var(--fl)">
-        ${escapeHtml(m.type || 'Mortgage')}
-        <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:4px">
-          <input type="number" class="cmp-rate-input" data-cmp-mi="${mi}"
-            value="${localRates[mi]}" min="0" max="30" step="0.01"
-            style="width:70px;padding:4px 6px;font-size:12px;text-align:center;background:var(--panel-2);border:1px solid ${isModified ? 'var(--warn)' : 'var(--border)'};color:${isModified ? 'var(--warn)' : 'var(--text)'};border-radius:6px;font-family:inherit" />
-          <span style="font-size:11px;color:var(--muted)">%</span>
-          ${isModified ? `<button class="cmp-rate-reset" data-cmp-mi="${mi}" data-actual="${actualRate}" title="Reset to ${actualRate}%" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px">↺</button>` : ''}
-        </div>
-        ${isModified ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">actual: ${actualRate}%</div>` : ''}
-      </th>`;
-    }).join('');
+    const headerRow1 = s.mortgages.map(m =>
+      `<th colspan="${DP_PCTS.length}" style="text-align:center;border-bottom:1px solid var(--fl)">${escapeHtml(m.type || 'Mortgage')}</th>`
+    ).join('');
 
     const headerRow2 = combos.map(c => {
       const sel = c.isSelected ? ' ★' : '';
-      const style = c.isSelected
-        ? 'background:rgba(56,189,248,0.12);color:var(--fl);font-weight:700'
-        : c.isActive ? 'color:var(--fl)' : '';
-      return `<th style="${style}">${c.pct}%${sel}</th>`;
+      const colStyle = c.isSelected ? 'background:rgba(56,189,248,0.12);' : '';
+      const pctColor = c.isSelected ? 'color:var(--fl);font-weight:700' : c.isActive ? 'color:var(--fl)' : '';
+      return `<th style="${colStyle}">
+        <div style="${pctColor}">${c.pct}%${sel}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:3px;margin-top:4px">
+          <input type="number" class="cmp-rate-input" data-cmp-mi="${c.mi}" data-cmp-pct="${c.pct}"
+            value="${c.rate}" min="0" max="30" step="0.01"
+            style="width:58px;padding:3px 5px;font-size:11px;text-align:center;background:var(--panel-2);border:1px solid ${c.isModified ? 'var(--warn)' : 'var(--border)'};color:${c.isModified ? 'var(--warn)' : 'var(--muted)'};border-radius:5px;font-family:inherit" />
+          <span style="font-size:10px;color:var(--muted)">%</span>
+          ${c.isModified ? `<button class="cmp-rate-reset" data-cmp-mi="${c.mi}" data-cmp-pct="${c.pct}" data-actual="${c.actualRate}" title="Reset" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0">↺</button>` : ''}
+        </div>
+      </th>`;
     }).join('');
 
     function row(label, key, color) {
@@ -2651,15 +2652,15 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
 
     modal.querySelectorAll('.cmp-rate-input').forEach(input => {
       input.addEventListener('input', e => {
-        const mi = +e.target.dataset.cmpMi;
+        const mi = +e.target.dataset.cmpMi, pct = +e.target.dataset.cmpPct;
         const v = parseFloat(e.target.value);
-        if (isFinite(v) && v >= 0) { localRates[mi] = v; buildAndRender(); }
+        if (isFinite(v) && v >= 0) { localRates[`${mi}_${pct}`] = v; buildAndRender(); }
       });
     });
     modal.querySelectorAll('.cmp-rate-reset').forEach(btn => {
       btn.addEventListener('click', e => {
-        const mi = +e.target.dataset.cmpMi;
-        localRates[mi] = parseFloat(e.target.dataset.actual);
+        const mi = +e.target.dataset.cmpMi, pct = +e.target.dataset.cmpPct;
+        localRates[`${mi}_${pct}`] = parseFloat(e.target.dataset.actual);
         buildAndRender();
       });
     });

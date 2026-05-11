@@ -185,16 +185,31 @@
     border-radius: 8px;
     padding: 14px;
     margin-bottom: 10px;
+    transition: opacity 0.15s, box-shadow 0.15s;
   }
   .mortgage-item:last-of-type { margin-bottom: 12px; }
+  .mortgage-item.drag-over {
+    box-shadow: 0 0 0 2px var(--fl);
+  }
+  .mortgage-item.dragging { opacity: 0.4; }
+  .mortgage-drag-handle {
+    cursor: grab;
+    color: var(--muted);
+    font-size: 16px;
+    padding: 0 4px;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .mortgage-drag-handle:active { cursor: grabbing; }
   .mortgage-item-header {
     display: grid;
-    grid-template-columns: 1fr 32px;
+    grid-template-columns: 20px 1fr 32px;
     gap: 8px;
     margin-bottom: 12px;
     align-items: center;
   }
-  .mortgage-item-header.no-remove { grid-template-columns: 1fr; }
+  .mortgage-item-header.no-remove { grid-template-columns: 20px 1fr; }
+  .mortgage-item-header.single { grid-template-columns: 1fr; }
   .mortgage-item .remove-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -1182,8 +1197,12 @@ function renderScenarioMortgages(sid) {
     const isCustom = p.value === 'custom';
     const item = document.createElement('div');
     item.className = 'mortgage-item';
+    item.draggable = true;
+    item.dataset.dragSid = sid;
+    item.dataset.dragMi = i;
     item.innerHTML = `
-      <div class="mortgage-item-header${showRemove ? '' : ' no-remove'}">
+      <div class="mortgage-item-header${s.mortgages.length === 1 ? ' single' : (showRemove ? '' : ' no-remove')}">
+        ${s.mortgages.length > 1 ? `<span class="mortgage-drag-handle" title="Drag to reorder">⠿</span>` : ''}
         <select data-sid="${sid}" data-mi="${i}" data-mf="preset" style="width:100%">
           ${MORTGAGE_PRESETS.map(pr => `<option value="${pr.value}" ${pr.value === p.value ? 'selected' : ''}>${pr.label}</option>`).join('')}
         </select>
@@ -2320,6 +2339,42 @@ document.getElementById('buy-scenarios-container').addEventListener('click', e =
     renderScenarioExtras(sid);
     refresh();
   }
+});
+
+// Mortgage drag-to-reorder
+let dragMortgageSid = null, dragMortgageMi = null;
+document.getElementById('buy-scenarios-container').addEventListener('dragstart', e => {
+  const item = e.target.closest('.mortgage-item');
+  if (!item) return;
+  dragMortgageSid = +item.dataset.dragSid;
+  dragMortgageMi = +item.dataset.dragMi;
+  item.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+document.getElementById('buy-scenarios-container').addEventListener('dragend', e => {
+  document.querySelectorAll('.mortgage-item').forEach(el => el.classList.remove('dragging', 'drag-over'));
+  dragMortgageSid = null; dragMortgageMi = null;
+});
+document.getElementById('buy-scenarios-container').addEventListener('dragover', e => {
+  const item = e.target.closest('.mortgage-item');
+  if (!item || +item.dataset.dragSid !== dragMortgageSid) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.mortgage-item').forEach(el => el.classList.remove('drag-over'));
+  item.classList.add('drag-over');
+});
+document.getElementById('buy-scenarios-container').addEventListener('drop', e => {
+  const item = e.target.closest('.mortgage-item');
+  if (!item || dragMortgageSid === null) return;
+  e.preventDefault();
+  const targetMi = +item.dataset.dragMi;
+  if (targetMi === dragMortgageMi) return;
+  const s = buyScenarios.find(x => x.id === dragMortgageSid);
+  if (!s) return;
+  const moved = s.mortgages.splice(dragMortgageMi, 1)[0];
+  s.mortgages.splice(targetMi, 0, moved);
+  renderScenarioMortgages(dragMortgageSid);
+  refresh();
 });
 
 // Amortization down-payment tab clicks

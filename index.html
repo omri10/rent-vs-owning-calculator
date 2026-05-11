@@ -2634,6 +2634,7 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
     backdrop.innerHTML = `<div class="year-cmp-modal" id="yearCmpModal"></div>`;
     document.body.appendChild(backdrop);
     backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.style.display = 'none'; });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && backdrop.style.display !== 'none') backdrop.style.display = 'none'; });
   }
   document.getElementById('yearCmpModal').innerHTML = html;
   backdrop.style.display = 'flex';

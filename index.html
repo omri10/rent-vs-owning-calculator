@@ -1477,7 +1477,7 @@ function computeScenario(s) {
   return results;
 }
 
-function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment, monthlyMIT, interestOnly) {
+function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment, monthlyMIT, interestOnly, fixedMonthly) {
   if (!canvas || principal <= 0 || years <= 0 || annualRatePct < 0) return;
   const down = downPayment || 0;
 
@@ -1656,14 +1656,23 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
     draw(hov);
     if (hov >= 0) {
       const d = yearlyData[hov];
+      const moInt = Math.round(d.interest / 12);
+      const moPrin = Math.round(d.principal / 12);
+      const moTax = fixedMonthly ? Math.round(fixedMonthly.tax) : 0;
+      const moIns = fixedMonthly ? Math.round(fixedMonthly.insurance) : 0;
+      const sep = `<div style="border-top:1px solid rgba(148,163,184,0.15);margin:4px 0"></div>`;
       tooltip.innerHTML =
-        `<div style="color:rgba(226,232,240,0.95);font-weight:700;margin-bottom:2px">Year ${hov + 1}</div>` +
-        (monthlyMIT ? `<div style="color:rgba(226,232,240,0.7)">Monthly (MIT) &nbsp;&nbsp;&nbsp;$${Math.round(monthlyMIT).toLocaleString('en-US')}</div>` : '') +
-        `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.principal).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(74,222,128,0.95)">Cumul. principal $${Math.round(d.cumulPrincipal).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.interest).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(192,132,252,0.95)">Cumul. interest &nbsp;$${Math.round(d.cumulInterest).toLocaleString('en-US')}</div>` +
-        `<div style="color:rgba(251,191,36,0.95)">Total equity &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>`;
+        `<div style="color:rgba(226,232,240,0.95);font-weight:700;margin-bottom:4px">Year ${hov + 1}</div>` +
+        `<div style="color:rgba(148,163,184,0.7);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Monthly</div>` +
+        `<div style="color:rgba(56,189,248,0.95)">Principal &nbsp;&nbsp;&nbsp;$${moPrin.toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(248,113,113,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;$${moInt.toLocaleString('en-US')}</div>` +
+        (moTax ? `<div style="color:rgba(148,163,184,0.85)">Tax &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${moTax.toLocaleString('en-US')}</div>` : '') +
+        (moIns ? `<div style="color:rgba(148,163,184,0.85)">Insurance &nbsp;&nbsp;$${moIns.toLocaleString('en-US')}</div>` : '') +
+        sep +
+        `<div style="color:rgba(148,163,184,0.7);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Cumulative</div>` +
+        `<div style="color:rgba(74,222,128,0.95)">Principal &nbsp;&nbsp;&nbsp;$${Math.round(d.cumulPrincipal).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(192,132,252,0.95)">Interest &nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.cumulInterest).toLocaleString('en-US')}</div>` +
+        `<div style="color:rgba(251,191,36,0.95)">Equity &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$${Math.round(d.totalEquity).toLocaleString('en-US')}</div>`;
       const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
       let tx = e.clientX + 14;
       let ty = e.clientY - th / 2;
@@ -1791,7 +1800,8 @@ function renderScenarioSummaries(sid, results, loan) {
         const rate = numVal(m.rate);
         const years = numVal(m.term);
         const coreTotal = r.rows.slice(0, 3).reduce((acc, row) => acc + row.monthly, 0);
-        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down, coreTotal, r.interestOnly));
+        const fixedMonthly = { tax: r.rows[1] ? r.rows[1].monthly : 0, insurance: r.rows[2] ? r.rows[2].monthly : 0 };
+        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down, coreTotal, r.interestOnly, fixedMonthly));
       }
     });
   }

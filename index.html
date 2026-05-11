@@ -1720,6 +1720,27 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
     });
     ctx.stroke();
 
+    // "Click for comparison" hint on hovered bar
+    if (hoveredIdx >= 0 && hoveredIdx < yearlyData.length) {
+      const d = yearlyData[hoveredIdx];
+      const x = pad.left + hoveredIdx * (barW + barGap);
+      const intH = (d.interest / maxBar) * chartH;
+      const prinH = (d.principal / maxBar) * chartH;
+      const barTopY = pad.top + chartH - intH - prinH;
+      const hint = '↑ click for comparison';
+      ctx.font = 'bold 10px -apple-system, sans-serif';
+      const hintW = ctx.measureText(hint).width + 10;
+      let hx = x + barW / 2 - hintW / 2;
+      if (hx < pad.left) hx = pad.left;
+      if (hx + hintW > W - pad.right) hx = W - pad.right - hintW;
+      const hy = Math.max(barTopY - 18, pad.top + 2);
+      ctx.fillStyle = 'rgba(56,189,248,0.18)';
+      ctx.beginPath(); ctx.roundRect(hx, hy, hintW, 14, 4); ctx.fill();
+      ctx.fillStyle = 'rgba(56,189,248,0.95)';
+      ctx.textAlign = 'center';
+      ctx.fillText(hint, hx + hintW / 2, hy + 10);
+    }
+
     // Dots on hovered year
     if (hoveredIdx >= 0 && hoveredIdx < yearlyData.length) {
       const d = yearlyData[hoveredIdx];

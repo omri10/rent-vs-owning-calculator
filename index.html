@@ -923,10 +923,10 @@
       <div class="card">
         <h3>Rent</h3>
         <div class="row">
-          <label for="ca_rent">Monthly rent <span class="pill ca">default $5,400</span></label>
+          <label for="ca_rent">Monthly rent</label>
           <div class="input-wrap">
             <span class="prefix">$</span>
-            <input type="number" id="ca_rent" class="with-prefix with-suffix" value="5400" min="0" step="50" />
+            <input type="number" id="ca_rent" class="with-prefix with-suffix" placeholder="e.g. 5400" min="0" step="50" />
             <span class="suffix">/ mo</span>
           </div>
         </div>
@@ -1085,8 +1085,28 @@ function numEl(el) {
   return numVal(el ? el.value : '');
 }
 
+const MORTGAGE_PRESETS = [
+  { value: 'custom',        label: 'Custom',          term: '',  interestOnly: false },
+  { value: '30yr-fixed',    label: '30-year fixed',   term: 30,  interestOnly: false },
+  { value: '20yr-fixed',    label: '20-year fixed',   term: 20,  interestOnly: false },
+  { value: '15yr-fixed',    label: '15-year fixed',   term: 15,  interestOnly: false },
+  { value: '10yr-fixed',    label: '10-year fixed',   term: 10,  interestOnly: false },
+  { value: 'arm-5-1',       label: 'ARM 5/1',         term: 30,  interestOnly: false },
+  { value: 'arm-7-1',       label: 'ARM 7/1',         term: 30,  interestOnly: false },
+  { value: 'arm-10-1',      label: 'ARM 10/1',        term: 30,  interestOnly: false },
+  { value: 'interest-only', label: 'Interest Only',   term: 30,  interestOnly: true  },
+  { value: 'fha-30',        label: 'FHA 30-year',     term: 30,  interestOnly: false },
+  { value: 'va-30',         label: 'VA 30-year',      term: 30,  interestOnly: false },
+  { value: 'jumbo-30',      label: 'Jumbo 30-year',   term: 30,  interestOnly: false },
+];
+
+function presetFromType(type) {
+  if (!type) return MORTGAGE_PRESETS[0];
+  return MORTGAGE_PRESETS.find(p => p.label === type) || MORTGAGE_PRESETS[0];
+}
+
 function newMortgage(defaults) {
-  return Object.assign({ type: '', rate: '', term: '' }, defaults || {});
+  return Object.assign({ preset: 'custom', type: '', rate: '', term: '', interestOnly: false }, defaults || {});
 }
 
 function newScenario(defaults) {
@@ -1158,14 +1178,22 @@ function renderScenarioMortgages(sid) {
   container.innerHTML = '';
   const showRemove = s.mortgages.length > 1;
   s.mortgages.forEach((m, i) => {
+    const p = presetFromType(m.type);
+    const isCustom = p.value === 'custom';
     const item = document.createElement('div');
     item.className = 'mortgage-item';
     item.innerHTML = `
       <div class="mortgage-item-header${showRemove ? '' : ' no-remove'}">
-        <input type="text" data-sid="${sid}" data-mi="${i}" data-mf="type" placeholder="Mortgage type (e.g. 30-year fixed, ARM 5/1, FHA)" value="${escapeHtml(m.type || '')}" />
+        <select data-sid="${sid}" data-mi="${i}" data-mf="preset" style="width:100%">
+          ${MORTGAGE_PRESETS.map(pr => `<option value="${pr.value}" ${pr.value === p.value ? 'selected' : ''}>${pr.label}</option>`).join('')}
+        </select>
         ${showRemove ? `<button class="remove-btn" data-sid="${sid}" data-mi="${i}" data-mf="remove" title="Remove">×</button>` : ''}
       </div>
-      <div class="two-col">
+      ${isCustom ? `
+      <div class="row" style="margin-top:8px">
+        <input type="text" data-sid="${sid}" data-mi="${i}" data-mf="type" placeholder="Label (e.g. My special loan)" value="${escapeHtml(m.type || '')}" />
+      </div>` : ''}
+      <div class="two-col" style="margin-top:8px">
         <div class="row">
           <label>Interest rate</label>
           <div class="input-wrap">
@@ -1176,11 +1204,12 @@ function renderScenarioMortgages(sid) {
         <div class="row">
           <label>Loan term</label>
           <div class="input-wrap">
-            <input type="number" data-sid="${sid}" data-mi="${i}" data-mf="term" class="with-suffix" placeholder="30" min="1" max="50" step="1" value="${m.term ?? ''}" />
+            <input type="number" data-sid="${sid}" data-mi="${i}" data-mf="term" class="with-suffix" placeholder="30" min="1" max="50" step="1" value="${m.term ?? ''}" ${!isCustom && !p.interestOnly ? 'readonly style="opacity:0.6"' : ''} />
             <span class="suffix">yrs</span>
           </div>
         </div>
       </div>
+      ${p.interestOnly ? `<div style="font-size:11px;color:var(--warn);margin-top:6px">⚠ Interest-only: no principal is paid down. Term used for chart display only.</div>` : ''}
     `;
     container.appendChild(item);
   });
@@ -1350,8 +1379,10 @@ function syncDownPayment(sid, source) {
   syncing[sid] = false;
 }
 
-function monthlyMortgage(principal, annualRatePct, years) {
-  if (principal <= 0 || years <= 0) return 0;
+function monthlyMortgage(principal, annualRatePct, years, interestOnly) {
+  if (principal <= 0) return 0;
+  if (interestOnly) return principal * (annualRatePct / 100) / 12;
+  if (years <= 0) return 0;
   const n = years * 12;
   const r = (annualRatePct / 100) / 12;
   if (r === 0) return principal / n;
@@ -1393,10 +1424,12 @@ function computeScenario(s) {
   const results = s.mortgages.map(m => {
     const rate = numVal(m.rate);
     const years = numVal(m.term);
-    const piMonthly = monthlyMortgage(loan, rate, years);
-    const rows = [{ label: 'Mortgage (P&I)', monthly: piMonthly }, ...fixedRows];
+    const io = !!m.interestOnly;
+    const piMonthly = monthlyMortgage(loan, rate, years, io);
+    const piLabel = io ? 'Mortgage (Interest Only)' : 'Mortgage (P&I)';
+    const rows = [{ label: piLabel, monthly: piMonthly }, ...fixedRows];
     const total = rows.reduce((acc, r) => acc + r.monthly, 0);
-    return { type: m.type || '', total, rows, rate, term: years };
+    return { type: m.type || '', total, rows, rate, term: years, interestOnly: io };
   });
 
   renderScenarioSummaries(s.id, results, loan);
@@ -1425,13 +1458,15 @@ function computeScenario(s) {
   return results;
 }
 
-function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment, monthlyMIT) {
+function drawAmortizationChart(canvas, principal, annualRatePct, years, downPayment, monthlyMIT, interestOnly) {
   if (!canvas || principal <= 0 || years <= 0 || annualRatePct < 0) return;
   const down = downPayment || 0;
 
   const r = (annualRatePct / 100) / 12;
   const n = years * 12;
-  const payment = r === 0 ? principal / n : principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  const payment = interestOnly
+    ? principal * r
+    : (r === 0 ? principal / n : principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1));
 
   const yearlyData = [];
   let balance = principal;
@@ -1440,7 +1475,7 @@ function drawAmortizationChart(canvas, principal, annualRatePct, years, downPaym
     let yearInterest = 0, yearPrincipal = 0;
     for (let m = 0; m < 12; m++) {
       const intPart = balance * r;
-      const prinPart = Math.min(payment - intPart, balance);
+      const prinPart = interestOnly ? 0 : Math.min(payment - intPart, balance);
       yearInterest += intPart;
       yearPrincipal += prinPart;
       balance = Math.max(0, balance - prinPart);
@@ -1737,7 +1772,7 @@ function renderScenarioSummaries(sid, results, loan) {
         const rate = numVal(m.rate);
         const years = numVal(m.term);
         const coreTotal = r.rows.slice(0, 3).reduce((acc, row) => acc + row.monthly, 0);
-        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down, coreTotal));
+        requestAnimationFrame(() => drawAmortizationChart(canvas, loanAmt, rate, years, down, coreTotal, r.interestOnly));
       }
     });
   }
@@ -1961,7 +1996,6 @@ function applyState(s, isInit) {
   caFields.forEach(k => {
     if (els[k]) els[k].value = (s[k] !== undefined && s[k] !== null) ? s[k] : '';
   });
-  if (els['ca_rent'] && els['ca_rent'].value === '') els['ca_rent'].value = '5400';
   caExtras = Array.isArray(s.caExtras) ? s.caExtras : [];
   if (Array.isArray(s.incomes) && s.incomes.length > 0) {
     incomes = s.incomes.map(i => {
@@ -2125,10 +2159,22 @@ document.getElementById('buy-scenarios-container').addEventListener('input', e =
   const mf = t.dataset.mf;
 
   if (sid !== null && mf && mi !== null) {
-    // mortgage field
     const s = buyScenarios.find(x => x.id === sid);
     if (!s || !s.mortgages || !s.mortgages[mi]) return;
-    s.mortgages[mi][mf] = t.value;
+    if (mf === 'preset') {
+      const p = MORTGAGE_PRESETS.find(pr => pr.value === t.value) || MORTGAGE_PRESETS[0];
+      s.mortgages[mi].preset = p.value;
+      s.mortgages[mi].interestOnly = p.interestOnly;
+      if (p.value !== 'custom') {
+        s.mortgages[mi].type = p.label;
+        if (p.term !== '') s.mortgages[mi].term = p.term;
+      } else {
+        s.mortgages[mi].type = '';
+      }
+      renderScenarioMortgages(sid);
+    } else {
+      s.mortgages[mi][mf] = t.value;
+    }
     refresh();
     return;
   }
@@ -2165,8 +2211,28 @@ document.getElementById('buy-scenarios-container').addEventListener('input', e =
 document.getElementById('buy-scenarios-container').addEventListener('change', e => {
   const t = e.target;
   const sid = t.dataset.sid !== undefined ? +t.dataset.sid : null;
+  const mi = t.dataset.mi !== undefined ? +t.dataset.mi : null;
+  const mf = t.dataset.mf;
   const ei = t.dataset.ei !== undefined ? +t.dataset.ei : null;
   const ef = t.dataset.ef;
+
+  if (sid !== null && mf === 'preset' && mi !== null) {
+    const s = buyScenarios.find(x => x.id === sid);
+    if (!s || !s.mortgages || !s.mortgages[mi]) return;
+    const p = MORTGAGE_PRESETS.find(pr => pr.value === t.value) || MORTGAGE_PRESETS[0];
+    s.mortgages[mi].preset = p.value;
+    s.mortgages[mi].interestOnly = p.interestOnly;
+    if (p.value !== 'custom') {
+      s.mortgages[mi].type = p.label;
+      if (p.term !== '') s.mortgages[mi].term = p.term;
+    } else {
+      s.mortgages[mi].type = '';
+    }
+    renderScenarioMortgages(sid);
+    refresh();
+    return;
+  }
+
   if (sid !== null && ef && ei !== null) {
     const s = buyScenarios.find(x => x.id === sid);
     if (!s || !s.extras[ei]) return;
@@ -2387,7 +2453,7 @@ els['resetBtn'].addEventListener('click', () => {
   caExtras = [];
   incomes = [{ name: '', sources: [{ label: '', amount: '' }] }];
   caFields.forEach(k => { if (els[k]) els[k].value = ''; });
-  if (els['ca_rent']) els['ca_rent'].value = '5400';
+  if (els['ca_rent']) els['ca_rent'].value = '';
   setIncomeUnlocked(false);
   renderBuyScenarios();
   renderCaExtras();

@@ -2554,48 +2554,70 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
     DP_PCTS.forEach(pct => { localRates[`${mi}_${pct}`] = numVal(m.rate); });
   });
 
+  let groupByDP = false;
+
   function buildAndRender() {
-    const combos = [];
+    // Build a lookup of all combo data first
+    const comboData = {};
     s.mortgages.forEach((m, mi) => {
       const years = numVal(m.term) || 30;
       const io = !!m.interestOnly;
       DP_PCTS.forEach(pct => {
         const rate = localRates[`${mi}_${pct}`];
+        const actualRate = numVal(m.rate);
         const down = price * pct / 100;
         const loan = price - down;
         const data = computeYearlyAmort(loan, rate, years, io);
         const d = data[Math.min(yearIdx, data.length - 1)];
         const monthly = monthlyMortgage(loan, rate, years, io);
-        const actualRate = numVal(m.rate);
-        combos.push({
+        comboData[`${mi}_${pct}`] = {
           mi, pct, rate, actualRate,
+          mortgageLabel: m.type || 'Mortgage',
           isSelected: pct === chosenPct,
           isActive: pct === activePct,
           isModified: Math.abs(rate - actualRate) > 0.001,
           moP: d ? Math.round(d.principal / 12) : 0,
           moI: d ? Math.round(d.interest / 12) : 0,
-          moTax: Math.round(tax),
-          moIns: Math.round(ins),
+          moTax: Math.round(tax), moIns: Math.round(ins),
           moTotal: Math.round(monthly + tax + ins),
           cumulP: d ? Math.round(d.cumulPrincipal) : 0,
           cumulI: d ? Math.round(d.cumulInterest) : 0,
           equity: Math.round(down + (d ? d.cumulPrincipal : 0)),
-        });
+        };
       });
     });
 
-    const totalCols = s.mortgages.length * DP_PCTS.length;
+    // Order combos based on toggle
+    const combos = [];
+    if (groupByDP) {
+      DP_PCTS.forEach(pct => s.mortgages.forEach((m, mi) => combos.push(comboData[`${mi}_${pct}`])));
+    } else {
+      s.mortgages.forEach((m, mi) => DP_PCTS.forEach(pct => combos.push(comboData[`${mi}_${pct}`])));
+    }
 
-    const headerRow1 = s.mortgages.map(m =>
-      `<th colspan="${DP_PCTS.length}" style="text-align:center;border-bottom:1px solid var(--fl)">${escapeHtml(m.type || 'Mortgage')}</th>`
-    ).join('');
+    const totalCols = combos.length;
 
+    // Header row 1: group labels
+    let headerRow1 = '';
+    if (groupByDP) {
+      headerRow1 = DP_PCTS.map(pct => {
+        const sel = pct === chosenPct ? ' ★' : '';
+        const hl = pct === chosenPct ? 'color:var(--fl);' : '';
+        return `<th colspan="${s.mortgages.length}" style="text-align:center;border-bottom:1px solid var(--fl);${hl}">${pct}% down${sel}</th>`;
+      }).join('');
+    } else {
+      headerRow1 = s.mortgages.map(m =>
+        `<th colspan="${DP_PCTS.length}" style="text-align:center;border-bottom:1px solid var(--fl)">${escapeHtml(m.type || 'Mortgage')}</th>`
+      ).join('');
+    }
+
+    // Header row 2: sub-label + rate input
     const headerRow2 = combos.map(c => {
-      const sel = c.isSelected ? ' ★' : '';
+      const subLabel = groupByDP ? escapeHtml(c.mortgageLabel) : `${c.pct}%${c.isSelected ? ' ★' : ''}`;
       const colStyle = c.isSelected ? 'background:rgba(56,189,248,0.12);' : '';
-      const pctColor = c.isSelected ? 'color:var(--fl);font-weight:700' : c.isActive ? 'color:var(--fl)' : '';
+      const labelColor = c.isSelected ? 'color:var(--fl);font-weight:700' : c.isActive ? 'color:var(--fl)' : '';
       return `<th style="${colStyle}">
-        <div style="${pctColor}">${c.pct}%${sel}</div>
+        <div style="${labelColor}">${subLabel}</div>
         <div style="display:flex;align-items:center;justify-content:center;gap:3px;margin-top:4px">
           <input type="number" class="cmp-rate-input" data-cmp-mi="${c.mi}" data-cmp-pct="${c.pct}"
             value="${c.rate}" min="0" max="30" step="0.01"
@@ -2625,7 +2647,12 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
         <div class="year-cmp-title">Year ${yearIdx + 1} — All mortgages &amp; down payments
           <span style="font-weight:400;font-size:12px;color:var(--muted);margin-left:8px">★ = your selected down payment</span>
         </div>
-        <button class="year-cmp-close" id="yearCmpClose">Close ✕</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+          <button id="yearCmpGroupToggle" style="background:${groupByDP ? 'rgba(56,189,248,0.15)' : 'transparent'};border:1px solid ${groupByDP ? 'var(--fl)' : 'var(--border)'};color:${groupByDP ? 'var(--fl)' : 'var(--muted)'};padding:5px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-family:inherit;white-space:nowrap">
+            ${groupByDP ? '⊞ Group by mortgage' : '⊞ Group by down payment'}
+          </button>
+          <button class="year-cmp-close" id="yearCmpClose">Close ✕</button>
+        </div>
       </div>
       <div style="overflow-x:auto">
       <table class="year-cmp-table">
@@ -2650,6 +2677,7 @@ function showMortgageYearComparison(sid, yearIdx, activePct, fixedMonthly) {
     `;
 
     document.getElementById('yearCmpClose').addEventListener('click', () => { document.getElementById('yearCmpBackdrop').style.display = 'none'; });
+    document.getElementById('yearCmpGroupToggle').addEventListener('click', () => { groupByDP = !groupByDP; buildAndRender(); });
 
     modal.querySelectorAll('.cmp-rate-input').forEach(input => {
       input.addEventListener('input', e => {
